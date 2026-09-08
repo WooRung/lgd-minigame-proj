@@ -120,6 +120,7 @@ export function App() {
         ) : screen === 'records' ? (
           <Records
             initialGame={selectedGame}
+            initialMode={runMode}
             profile={profile}
             onBack={() => setScreen('lobby')}
             onChallenge={(game, mode) => {

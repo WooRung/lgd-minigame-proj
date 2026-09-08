@@ -58,15 +58,19 @@ export function Records({
   onBack,
   onChallenge,
   initialGame = 'bomber',
+  initialMode = 'normal',
 }: {
   profile: Profile;
   initialGame?: GameKind;
+  initialMode?: RunMode;
   onBack: () => void;
   onChallenge: (game: GameKind, mode: RunMode) => void;
 }) {
   const [game, setGame] = useState<GameKind>(initialGame),
     [mode, setMode] = useState<RunMode>(
-      initialGame === 'runner' ? 'normal' : 'daily',
+      initialGame === 'bomber' && initialMode === 'normal'
+        ? 'daily'
+        : initialMode,
     ),
     [board, setBoard] = useState<Leaderboard | null>(null),
     [history, setHistory] = useState<HistoryRow[]>([]),
