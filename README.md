@@ -2,7 +2,7 @@
 
 이름만 입력하고 바로 시작하는 웹 오락실입니다. 폭탄 게임과 횡스크롤 러닝 게임에 각각 싱글 스테이지, 최대 4인 실시간 대전, 게임별 기록·랭킹을 제공합니다.
 
-현재는 개발 규칙·제품 설계·계획을 준비한 상태입니다. 앱 구현과 실행 명령은 첫 개발 단계에서 추가합니다.
+현재 P1 로컬 기반과 이름 입력 흐름이 구현되어 있습니다. 게임 구현 진척은 PLAN을 확인하세요.
 
 ## 문서
 
@@ -27,4 +27,23 @@ GitHub 저장소는 [WooRung/lgd-minigame-proj](https://github.com/WooRung/lgd-m
 
 ## 현재 실행 상태
 
-아직 `package.json`과 앱 코드가 없으므로 실행·빌드 명령은 없습니다. P1에서 실제로 검증한 명령을 여기에 추가합니다. 비밀값, 로컬 DB, 실행 산출물은 저장소에 포함하지 않습니다.
+Node.js 22.12 이상(검증: 24.16), npm을 사용합니다.
+
+```sh
+npm ci
+npm run db:local
+npx playwright install chromium
+npm run dev
+```
+
+[로컬 오락실](http://127.0.0.1:5173)을 여세요. 최초 이름 입력 후 같은 브라우저에서 재방문하면 세션을 이어갑니다. 이름은 중복 가능하며 다른 브라우저 기록을 복구하는 수단이 아닙니다.
+
+```sh
+npm run typecheck
+npm run check
+npm run test
+npm run test:e2e
+npm run build
+```
+
+`npm run format`은 Biome 자동 수정을 적용합니다. `npm run db:local`은 로컬 D1에만 SQL을 적용하며 `.wrangler/`에 상태를 저장합니다. Wrangler의 영(0) UUID는 로컬 전용 자리표시자입니다. 실제 배포 전에 승인된 원격 D1 ID로 바꿔야 합니다. 비밀값, 로컬 DB, 실행 산출물은 Git에 포함하지 않습니다.

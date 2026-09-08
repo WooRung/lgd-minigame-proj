@@ -130,3 +130,10 @@ tests/e2e/              사용자 흐름 검증
 - [Durable Object 수명 주기](https://developers.cloudflare.com/durable-objects/concepts/durable-object-lifecycle/): 타이머와 휴면 조건.
 - [D1](https://developers.cloudflare.com/d1/), [D1 요금](https://developers.cloudflare.com/d1/platform/pricing/): SQLite 의미 체계를 갖는 관리형 DB.
 - [Phaser 프로젝트 템플릿](https://docs.phaser.io/phaser/getting-started/project-templates): React·Vite·TypeScript 연동.
+
+## 구현 결정
+
+- P1: 제품 표시는 ‘틈새 오락실’, 게임은 ‘팡팡 아레나’와 ‘바람 러너’. 아이보리·주황·청록, 한국어 중심 UI를 사용한다. `public/arcade.svg`는 직접 작성한 원본 그림이며 외부 상용 에셋을 사용하지 않았다.
+- Phaser는 공식 버전 문서와 일치하는 안정 3.90.0을 최초 선택했다. 나머지 최초 버전은 package-lock.json을 기준으로 한다.
+- 세션은 256비트 난수, DB에는 SHA-256 해시만 저장. HttpOnly·SameSite=Strict, HTTPS에서는 Secure. 유효기간 180일이며 만료·브라우저 데이터 삭제 시 복구하지 않는다.
+- 검증 환경에 Browser 플러그인 스킬이 없으므로 Playwright Chromium을 사용한다. 단계별 기능 검증을 우선하고 별도 디자인 승인·반복 리뷰는 추가하지 않는다.
