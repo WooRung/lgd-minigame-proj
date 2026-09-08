@@ -185,11 +185,7 @@ for (const count of [2, 4])
       await host.page.getByRole('button', { name: '새 방 만들기' }).click();
       const code = await host.page.getByTestId('room-code').innerText();
       const view = async () =>
-        (
-          await host.context.request.get(
-            `http://127.0.0.1:5173/api/rooms/${code}/view`,
-          )
-        ).json();
+        (await host.context.request.get(`/api/rooms/${code}/view`)).json();
       for (const r of racers.slice(1)) {
         await r.page.getByLabel('초대 코드').fill(code);
         await r.page
@@ -239,11 +235,7 @@ for (const count of [2, 4])
       );
       const snapshots = await Promise.all(
         racers.map(async (r) =>
-          (
-            await r.context.request.get(
-              `http://127.0.0.1:5173/api/rooms/${code}/view`,
-            )
-          ).json(),
+          (await r.context.request.get(`/api/rooms/${code}/view`)).json(),
         ),
       );
       expect(new Set(snapshots.map((v) => v.startedAt)).size).toBe(1);
@@ -271,9 +263,7 @@ for (const count of [2, 4])
         fullPage: true,
       });
       const history = await (
-        await host.context.request.get(
-          'http://127.0.0.1:5173/api/history?game=runner',
-        )
+        await host.context.request.get('/api/history?game=runner')
       ).json();
       expect(
         history.filter((h: { id: string }) => h.id === final.matchId),
@@ -281,9 +271,7 @@ for (const count of [2, 4])
       expect(
         (
           await (
-            await host.context.request.get(
-              'http://127.0.0.1:5173/api/history?game=bomber',
-            )
+            await host.context.request.get('/api/history?game=bomber')
           ).json()
         ).length,
       ).toBe(0);
@@ -466,11 +454,7 @@ for (const count of [2, 4])
         .click();
       await expect(host.page.getByTestId('room-phase')).toHaveText('경기 중');
       const view = async () =>
-        (
-          await host.context.request.get(
-            `http://127.0.0.1:5173/api/rooms/${code}/view`,
-          )
-        ).json();
+        (await host.context.request.get(`/api/rooms/${code}/view`)).json();
       const before = await view();
       expect(before.phase).toBe('playing');
       await guest.page.close();

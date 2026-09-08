@@ -11,6 +11,12 @@ test('이름 입력, 동일 브라우저 재방문, 동명이인 세션 분리',
   await page.getByLabel('플레이어 이름').fill('동명이인');
   await page.getByRole('button', { name: '오락실 입장' }).click();
   await expect(page.getByText('동명이인 님')).toBeVisible();
+  const session = (await page.context().cookies()).find(
+    (cookie) => cookie.name === 'arcade_session',
+  );
+  expect(session?.httpOnly).toBe(true);
+  expect(session?.sameSite).toBe('Strict');
+  expect(session?.secure).toBe(new URL(page.url()).protocol === 'https:');
   const first = await (await page.request.get('/api/me')).json();
   await page.reload();
   await expect(page.getByText('동명이인 님')).toBeVisible();

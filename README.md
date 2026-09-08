@@ -2,7 +2,7 @@
 
 이름만 입력해 시작하는 웹 미니게임 모음입니다. **팡팡 아레나**(폭탄)는 싱글 5단계, **바람 러너**는 무한 싱글 러닝을 제공합니다. 두 게임 모두 2~4인 실시간 초대방과 기록 경쟁을 지원합니다. React·Phaser 화면과 순수 TypeScript 게임 코어, Cloudflare Workers·Durable Objects·D1을 한 패키지로 구성했습니다.
 
-현재 기능은 로컬에서 검증했고 Cloudflare 첫 배포 절차를 준비했습니다. 실제 공개 배포와 원격 DB 생성·마이그레이션은 수행하지 않았습니다. 완료 증거와 남은 원격 작업은 [PLAN](docs/PLAN.md), 배포 담당자용 절차는 [DEPLOY](docs/DEPLOY.md)에 있습니다.
+**[틈새 오락실 바로 플레이](https://teumsae-arcade.ys-475.workers.dev)** — 2026-09-09 Cloudflare Free에 배포하고 원격 D1을 연결했습니다. 공개 검증 증거는 [PLAN](docs/PLAN.md), 리소스·재배포·사용량·복구 절차는 [DEPLOY](docs/DEPLOY.md)에 있습니다.
 
 ## 바로 실행
 
@@ -56,7 +56,7 @@ npm run deploy:check
 
 `test:e2e`는 로컬 개발 서버를 시작하거나 기존 서버를 사용합니다. 실제 키 입력으로 팡팡 5단계와 무한 러너 여러 구간을 플레이하고 여러 독립 세션을 동시 제어하므로 전체 실행은 수 분이 걸립니다. 변경 범위 검증은 예를 들어 `npm run test:e2e -- tests/e2e/runner.spec.ts`처럼 지정합니다. 기록 정렬 경계용 합성 데이터는 로컬 테스트에서만 만들며 제품 화면에 가짜 순위를 넣지 않습니다.
 
-`npm run format`은 Biome 자동 수정, `npm run build`는 프로덕션 번들 생성, `npm run deploy:check`는 빌드 후 Wrangler dry-run입니다. Phaser 지연 로딩 파일은 압축 전 약 1.2MB이며 최초 게임 진입 다운로드 비용이 있습니다. 원격 성능·무료 수용량은 배포 후 별도 측정해야 합니다.
+`npm run format`은 Biome 자동 수정, `npm run build`는 프로덕션 번들 생성, `npm run deploy:check`는 빌드 후 Wrangler dry-run입니다. Phaser 지연 로딩 파일은 압축 전 약 1.2MB이며 최초 게임 진입 다운로드 비용이 있습니다. 첫 배포의 원격 사용량은 DEPLOY에 기록했습니다. 장시간·여러 동시 방의 무료 수용량은 추가 측정이 필요합니다.
 
 ## 구조와 에셋
 
