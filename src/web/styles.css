@@ -360,9 +360,16 @@ footer small {
   overflow: hidden;
   border-radius: 14px;
   background: #233c38;
+  position: relative;
+  aspect-ratio: 640 / 528;
 }
 .game-canvas canvas {
   display: block;
+  position: absolute;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+  margin: 0 !important;
 }
 .play-layout {
   display: grid;

@@ -102,3 +102,5 @@ CI/자동 배포 연결은 이 단계에서도 별도 명시적 요청이 있을
 | P1 이름 입력과 로컬 기반 | `npm run typecheck`, `npm run format`, `npm run test`(6개), `npm run build`, `npm run db:local`, `npm run test:e2e -- tests/e2e/session.spec.ts` | 통과. Chromium 1440×1000/390×844, 재방문·동명이인 분리·HttpOnly·교차 출처 거절 확인. 공개 URL 미검증 | P2 |
 
 | P2 폭탄 싱글 | 폭탄 코어 6개(5단계×100시드 싱글/멀티 맵 검증 포함), 결과 검증 7개, `npm run typecheck`, `npm run format`, `npm run build`, bomber.spec.ts 브라우저 2개 | 통과. 실제 키 입력으로 실패·같은 맵 재도전·일시정지·5단계 완료·재방문. 타인 제출/시간 위조/단계 건너뛰기/중복 거절. Phaser 지연 로딩 번들 약 1.2MB 경고는 알려진 초기 다운로드 비용 | P3 |
+
+| P2 화면 비율 수정 | Chromium 게임 실패 결과 화면 캡처, 결과 영역 하단 ≤ footer 상단 측정, `npm run check`, `git diff --check` | 통과. Phaser 캔버스의 자동 크기 확장이 결과/푸터를 겹치게 하던 문제를 고정 종횡비로 해결 | P3 |
