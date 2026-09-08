@@ -1,6 +1,7 @@
-import type { Progress } from '../shared/contracts';
+import { isGame, type Progress } from '../shared/contracts';
 import type { Env } from './env';
 import { body, checkOrigin, HttpError, json } from './http';
+import { history, leaderboard } from './rankings';
 import { roomRequest } from './rooms/router';
 import { finishRun, issueRun } from './runs';
 import {
@@ -50,6 +51,28 @@ export default {
           new URL(request.url).protocol === 'https:',
         );
         return json({ player, progress: [] }, 201, { 'Set-Cookie': cookie });
+      }
+      if (path === '/api/rankings' && request.method === 'GET') {
+        const query = new URL(request.url).searchParams,
+          game = query.get('game'),
+          mode = query.get('mode');
+        if (!isGame(game) || (mode !== 'daily' && mode !== 'weekly'))
+          throw new HttpError(400, '게임과 기간을 확인해 주세요.');
+        return json(
+          await leaderboard(
+            env,
+            game,
+            mode,
+            (await getPlayer(request, env))?.id ?? null,
+          ),
+        );
+      }
+      if (path === '/api/history' && request.method === 'GET') {
+        const game = new URL(request.url).searchParams.get('game');
+        if (!isGame(game)) throw new HttpError(400, '게임을 확인해 주세요.');
+        return json(
+          await history(env, game, (await requirePlayer(request, env)).id),
+        );
       }
       if (path === '/api/rooms' || path.startsWith('/api/rooms/'))
         return await roomRequest(

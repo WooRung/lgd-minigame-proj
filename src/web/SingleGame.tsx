@@ -7,7 +7,7 @@ import {
 } from '../core/bomber/game';
 import { TICK_MS } from '../core/random';
 import type { Profile } from '../shared/contracts';
-import { type Run, readRun } from '../shared/runs';
+import { type Run, type RunMode, readRun } from '../shared/runs';
 import { api } from './api';
 
 function BomberCanvas({
@@ -82,14 +82,18 @@ export function SingleGame({
   profile,
   onBack,
   onSaved,
+  mode = 'normal',
 }: {
   profile: Profile;
+  mode?: RunMode;
   onBack: () => void;
   onSaved: () => void;
 }) {
   const completed =
     profile.progress.find((p) => p.game === 'bomber')?.completed_stage ?? 0;
-  const [stage, setStage] = useState(Math.min(5, completed + 1));
+  const [stage, setStage] = useState(
+    mode === 'normal' ? Math.min(5, completed + 1) : 3,
+  );
   const [run, setRun] = useState<Run | null>(null),
     [state, setState] = useState<BomberState | null>(null);
   const [paused, setPaused] = useState(false),
@@ -108,6 +112,7 @@ export function SingleGame({
       const r = readRun(
         await api('/runs', {
           game: 'bomber',
+          mode,
           stage: nextStage,
           ...(retry && run ? { retryOf: run.id } : {}),
         }),
@@ -163,10 +168,18 @@ export function SingleGame({
     <>
       <div className="toolbar">
         <h1>
-          팡팡 아레나 <span className="muted">· 싱글</span>
+          팡팡 아레나{' '}
+          <span className="muted">
+            ·{' '}
+            {mode === 'normal'
+              ? '싱글'
+              : mode === 'daily'
+                ? '일간 도전'
+                : '주간 도전'}
+          </span>
         </h1>
         <button type="button" onClick={onBack}>
-          로비로
+          {mode === 'normal' ? '로비로' : '기록으로'}
         </button>
       </div>
       {error && (
@@ -191,7 +204,7 @@ export function SingleGame({
               <button
                 key={n}
                 type="button"
-                disabled={n > completed + 1}
+                disabled={mode !== 'normal' || n > completed + 1}
                 className={stage === n ? 'selected' : ''}
                 onClick={() => setStage(n)}
               >
@@ -246,7 +259,7 @@ export function SingleGame({
                   >
                     같은 맵 재도전
                   </button>
-                  {state.status === 'won' && stage < 5 && (
+                  {state.status === 'won' && stage < 5 && mode === 'normal' && (
                     <button
                       type="button"
                       className="primary"
@@ -256,9 +269,11 @@ export function SingleGame({
                       다음 단계
                     </button>
                   )}
-                  {state.status === 'won' && stage === 5 && (
-                    <strong>5단계 정복! 모든 스테이지를 완료했어요.</strong>
-                  )}
+                  {state.status === 'won' &&
+                    stage === 5 &&
+                    mode === 'normal' && (
+                      <strong>5단계 정복! 모든 스테이지를 완료했어요.</strong>
+                    )}
                 </div>
               </section>
             )}

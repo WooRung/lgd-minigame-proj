@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { type Profile, readProfile } from '../shared/contracts';
+import type { RunMode } from '../shared/runs';
 import { api } from './api';
 import { Multiplayer } from './Multiplayer';
+import { Records } from './Records';
 import { SingleGame } from './SingleGame';
 
 export function App() {
@@ -9,9 +11,10 @@ export function App() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [name, setName] = useState('');
-  const [screen, setScreen] = useState<'lobby' | 'bomber' | 'multi'>(
-    new URL(location.href).searchParams.has('room') ? 'multi' : 'lobby',
-  );
+  const [runMode, setRunMode] = useState<RunMode>('normal');
+  const [screen, setScreen] = useState<
+    'lobby' | 'bomber' | 'multi' | 'records'
+  >(new URL(location.href).searchParams.has('room') ? 'multi' : 'lobby');
   const refresh = useCallback(() => {
     api('/me')
       .then(readProfile)
@@ -113,6 +116,15 @@ export function App() {
               </small>
             </form>
           </section>
+        ) : screen === 'records' ? (
+          <Records
+            profile={profile}
+            onBack={() => setScreen('lobby')}
+            onChallenge={(_game, mode) => {
+              setRunMode(mode);
+              setScreen('bomber');
+            }}
+          />
         ) : screen === 'multi' ? (
           <Multiplayer
             player={profile.player}
@@ -123,9 +135,10 @@ export function App() {
           />
         ) : screen === 'bomber' ? (
           <SingleGame
+            mode={runMode}
             profile={profile}
             onBack={() => {
-              setScreen('lobby');
+              setScreen(runMode === 'normal' ? 'lobby' : 'records');
               refresh();
             }}
             onSaved={refresh}
@@ -168,7 +181,10 @@ export function App() {
                         type="button"
                         className="primary"
                         disabled={game !== 'bomber'}
-                        onClick={() => setScreen('bomber')}
+                        onClick={() => {
+                          setRunMode('normal');
+                          setScreen('bomber');
+                        }}
                       >
                         {game === 'bomber' ? '싱글 플레이' : '싱글 준비 중'}
                       </button>
@@ -189,9 +205,12 @@ export function App() {
             <section className="summary-grid">
               <div>
                 <h2>오늘의 기록</h2>
+                <button type="button" onClick={() => setScreen('records')}>
+                  기록과 랭킹 보기 →
+                </button>
                 <p className="empty">
-                  아직 기록이 없어요.
-                  <span>기록 도전은 게임이 열리면 시작할 수 있어요.</span>
+                  같은 맵, 같은 조건의 기록 경쟁.
+                  <span>일간·주간 도전에 도전해 보세요.</span>
                 </p>
               </div>
               <div>

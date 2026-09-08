@@ -573,3 +573,43 @@ tr.mine {
 .row + .game-canvas {
   margin-top: 16px;
 }
+
+.records-layout {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 20px;
+}
+.history-list {
+  list-style: none;
+  padding: 0;
+}
+.history-list li {
+  display: flex;
+  gap: 20px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+}
+.history-list time {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 12px;
+}
+@media (max-width: 650px) {
+  .records-layout {
+    grid-template-columns: 1fr;
+  }
+  .history-list li {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .history-list time {
+    width: 100%;
+    margin: 0;
+  }
+  th,
+  td {
+    padding: 10px 5px;
+    font-size: 12px;
+  }
+}

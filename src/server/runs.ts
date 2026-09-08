@@ -1,9 +1,11 @@
 import { BOMBER_LIMIT } from '../core/bomber/game';
+import { generateMap } from '../core/bomber/map';
 import { RULES_VERSION, TICK_MS } from '../core/random';
 import { isGame, type Player } from '../shared/contracts';
-import type { Run } from '../shared/runs';
+import { isRunMode, type Run } from '../shared/runs';
 import type { Env } from './env';
 import { body, HttpError, json } from './http';
+import { BEST_UPSERT, challenge } from './rankings';
 export interface StoredRun {
   id: string;
   player_id: string;
@@ -56,13 +58,29 @@ export function validateResult(
     throw new HttpError(400, '플레이 시간과 결과가 일치하지 않습니다.');
   if (won && run.game === 'bomber' && score < 1000)
     throw new HttpError(400, '완료 점수가 올바르지 않습니다.');
+  if (run.game === 'bomber') {
+    const map = generateMap(run.seed, run.stage);
+    const base = won ? 1000 + BOMBER_LIMIT - ticks : 0;
+    const bonus = score - base;
+    if (
+      bonus < 0 ||
+      bonus % 50 !== 0 ||
+      bonus >
+        map.tiles.filter((t) => t === 2).length * 50 + map.items.length * 100
+    )
+      throw new HttpError(400, '이 맵에서 가능한 점수가 아닙니다.');
+  }
   return { ticks, score, won };
 }
 export async function issueRun(request: Request, env: Env, player: Player) {
   const data = await body(request);
   if (!isGame(data.game) || data.game !== 'bomber')
     throw new HttpError(400, '지원하는 게임을 선택해 주세요.');
-  const stage = data.stage;
+  const mode = data.mode ?? 'normal';
+  if (!isRunMode(mode)) throw new HttpError(400, '도전 모드를 확인해 주세요.');
+  const condition =
+    mode === 'normal' ? null : challenge(data.game, mode, Date.now());
+  const stage = condition?.stage ?? data.stage;
   if (
     typeof stage !== 'number' ||
     !Number.isInteger(stage) ||
@@ -75,9 +93,10 @@ export async function issueRun(request: Request, env: Env, player: Player) {
   )
     .bind(player.id, data.game)
     .first<{ completed_stage: number }>();
-  if (stage > (progress?.completed_stage ?? 0) + 1)
+  if (mode === 'normal' && stage > (progress?.completed_stage ?? 0) + 1)
     throw new HttpError(403, '앞 단계를 먼저 완료해 주세요.');
-  let seed = crypto.getRandomValues(new Uint32Array(1))[0] ?? 1;
+  let seed =
+    condition?.seed ?? crypto.getRandomValues(new Uint32Array(1))[0] ?? 1;
   if (data.retryOf !== undefined) {
     if (typeof data.retryOf !== 'string')
       throw new HttpError(400, '재도전 정보를 확인해 주세요.');
@@ -90,7 +109,8 @@ export async function issueRun(request: Request, env: Env, player: Player) {
       !previous ||
       previous.game !== data.game ||
       previous.stage !== stage ||
-      previous.mode !== 'normal'
+      previous.mode !== mode ||
+      previous.period !== (condition?.period ?? '')
     )
       throw new HttpError(403, '본인의 같은 단계만 재도전할 수 있습니다.');
     seed = previous.seed;
@@ -99,11 +119,11 @@ export async function issueRun(request: Request, env: Env, player: Player) {
     id: crypto.randomUUID(),
     player_id: player.id,
     game: data.game,
-    mode: 'normal',
+    mode,
     stage,
     seed,
     rules_version: RULES_VERSION,
-    period: '',
+    period: condition?.period ?? '',
     issued_at: Date.now(),
     finished_at: null,
     won: null,
@@ -159,6 +179,8 @@ export async function finishRun(
         'INSERT INTO progress(player_id,game,completed_stage,best_score) SELECT player_id,game,stage,score FROM runs WHERE id=? AND player_id=? AND won=1 ON CONFLICT(player_id,game) DO UPDATE SET completed_stage=MAX(completed_stage,excluded.completed_stage), best_score=MAX(best_score,excluded.best_score)',
       ).bind(id, player.id),
     );
+  if (result.won && run.mode !== 'normal')
+    statements.push(env.DB.prepare(BEST_UPSERT).bind(id, player.id));
   const response = await env.DB.batch(statements);
   if (response[0]?.meta.changes !== 1)
     throw new HttpError(409, '이미 저장된 도전입니다.');
