@@ -44,3 +44,13 @@ describe('싱글 결과 검증', () => {
     ).toThrow();
   });
 });
+
+it('러닝의 불가능한 완주 시간과 수집 점수를 거절한다', () => {
+  const runner = { ...run, game: 'runner' as const };
+  expect(() =>
+    validateResult(runner, { ticks: 60, score: 2790, won: true }, 100000),
+  ).toThrow();
+  expect(() =>
+    validateResult(runner, { ticks: 1500, score: 9999, won: true }, 100000),
+  ).toThrow();
+});

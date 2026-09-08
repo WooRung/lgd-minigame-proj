@@ -1,5 +1,6 @@
 import type { BomberInput, BomberState } from '../core/bomber/game';
 import { HEIGHT, WIDTH } from '../core/bomber/map';
+import type { RunnerState } from '../core/runner/game';
 import { type GameKind, isGame, isObject } from './contracts';
 export const RECONNECT_MS = 15000;
 export const IDLE_MS = 15 * 60 * 1000;
@@ -28,7 +29,7 @@ export interface RoomView {
   seed: number;
   matchId: string | null;
   startedAt: number;
-  state: BomberState | null;
+  state: BomberState | RunnerState | null;
   results: MatchResult[];
   saved: boolean;
   notice: string;
@@ -239,7 +240,7 @@ export function readRoom(v: unknown): RoomView {
       outcome: r.outcome,
     };
   });
-  if (v.state !== null && !isBomberState(v.state))
+  if (v.state !== null && !isBomberState(v.state) && !isRunnerState(v.state))
     throw Error('경기 상태 오류');
   return {
     code: v.code,
@@ -255,4 +256,92 @@ export function readRoom(v: unknown): RoomView {
     saved: v.saved,
     notice: v.notice,
   };
+}
+
+function isRunnerState(s: unknown): s is RunnerState {
+  if (
+    !isObject(s) ||
+    s.kind !== 'runner' ||
+    !isObject(s.course) ||
+    !integer(s.tick) ||
+    !['playing', 'won', 'lost', 'draw'].includes(String(s.status)) ||
+    !['single', 'multi'].includes(String(s.mode)) ||
+    !strings(s.winners)
+  )
+    return false;
+  const c = s.course;
+  if (
+    !integer(c.seed) ||
+    !integer(c.stage) ||
+    typeof c.generatorVersion !== 'string' ||
+    typeof c.rulesVersion !== 'string' ||
+    !finite(c.length) ||
+    !finite(c.speed) ||
+    typeof c.fallback !== 'boolean'
+  )
+    return false;
+  if (
+    !Array.isArray(c.obstacles) ||
+    c.obstacles.length > 100 ||
+    !c.obstacles.every(
+      (o) =>
+        isObject(o) &&
+        finite(o.x) &&
+        finite(o.width) &&
+        finite(o.height) &&
+        (o.lane === 0 || o.lane === 1) &&
+        (o.kind === 'hurdle' || o.kind === 'gap'),
+    )
+  )
+    return false;
+  if (
+    !Array.isArray(c.platforms) ||
+    !c.platforms.every(
+      (p) =>
+        isObject(p) &&
+        finite(p.x) &&
+        finite(p.width) &&
+        finite(p.phase) &&
+        (p.lane === 0 || p.lane === 1),
+    )
+  )
+    return false;
+  if (
+    !Array.isArray(c.coins) ||
+    !c.coins.every(
+      (p) =>
+        isObject(p) &&
+        integer(p.id) &&
+        finite(p.x) &&
+        finite(p.y) &&
+        (p.lane === 0 || p.lane === 1),
+    )
+  )
+    return false;
+  if (
+    !Array.isArray(c.forks) ||
+    !c.forks.every((p) => isObject(p) && finite(p.start) && finite(p.end))
+  )
+    return false;
+  return (
+    Array.isArray(s.players) &&
+    s.players.length <= 4 &&
+    s.players.every(
+      (p) =>
+        isObject(p) &&
+        typeof p.id === 'string' &&
+        finite(p.x) &&
+        finite(p.y) &&
+        finite(p.vy) &&
+        (p.lane === 0 || p.lane === 1) &&
+        typeof p.alive === 'boolean' &&
+        integer(p.score) &&
+        Array.isArray(p.collected) &&
+        p.collected.every(integer) &&
+        integer(p.boost) &&
+        (p.finishedAt === null || integer(p.finishedAt)) &&
+        typeof p.held === 'boolean' &&
+        typeof p.grounded === 'boolean',
+    )
+  );
 }

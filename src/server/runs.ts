@@ -1,6 +1,7 @@
 import { BOMBER_LIMIT } from '../core/bomber/game';
 import { generateMap } from '../core/bomber/map';
 import { RULES_VERSION, TICK_MS } from '../core/random';
+import { BOOST_SPEED, generateCourse } from '../core/runner/course';
 import { isGame, type Player } from '../shared/contracts';
 import { isRunMode, type Run } from '../shared/runs';
 import type { Env } from './env';
@@ -70,11 +71,32 @@ export function validateResult(
     )
       throw new HttpError(400, '이 맵에서 가능한 점수가 아닙니다.');
   }
+  if (run.game === 'runner') {
+    const course = generateCourse(run.seed, run.stage);
+    const maxCoins = course.coins.length;
+    if (won) {
+      const base = Math.floor(course.length / 10) + 1000 + BOMBER_LIMIT - ticks;
+      if (
+        ticks < Math.ceil(course.length / (course.speed + BOOST_SPEED)) ||
+        score < base ||
+        (score - base) % 100 !== 0 ||
+        score - base > maxCoins * 100
+      )
+        throw new HttpError(400, '이 코스에서 가능한 완주 기록이 아닙니다.');
+    } else if (
+      score >
+      Math.floor(
+        Math.min(course.length, ticks * (course.speed + BOOST_SPEED)) / 10,
+      ) +
+        maxCoins * 100
+    )
+      throw new HttpError(400, '이 코스에서 가능한 점수가 아닙니다.');
+  }
   return { ticks, score, won };
 }
 export async function issueRun(request: Request, env: Env, player: Player) {
   const data = await body(request);
-  if (!isGame(data.game) || data.game !== 'bomber')
+  if (!isGame(data.game))
     throw new HttpError(400, '지원하는 게임을 선택해 주세요.');
   const mode = data.mode ?? 'normal';
   if (!isRunMode(mode)) throw new HttpError(400, '도전 모드를 확인해 주세요.');

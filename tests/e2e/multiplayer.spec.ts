@@ -133,7 +133,9 @@ for (const count of [2, 4])
       ).toEqual(ended?.results);
     expect(
       guests.every((g) =>
-        g.frames.some((r) => (r.state?.flames.length ?? 0) > 0),
+        g.frames.some(
+          (r) => r.state?.kind === 'bomber' && r.state.flames.length > 0,
+        ),
       ),
     ).toBe(true);
     await host.page.screenshot({

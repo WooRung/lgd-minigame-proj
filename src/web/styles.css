@@ -613,3 +613,7 @@ tr.mine {
     font-size: 12px;
   }
 }
+
+.game-canvas.runner-canvas {
+  aspect-ratio: 896 / 480;
+}

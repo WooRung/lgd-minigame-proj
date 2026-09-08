@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { type Profile, readProfile } from '../shared/contracts';
+import { type GameKind, type Profile, readProfile } from '../shared/contracts';
 import type { RunMode } from '../shared/runs';
 import { api } from './api';
 import { Multiplayer } from './Multiplayer';
@@ -11,6 +11,7 @@ export function App() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [name, setName] = useState('');
+  const [selectedGame, setSelectedGame] = useState<GameKind>('bomber');
   const [runMode, setRunMode] = useState<RunMode>('normal');
   const [screen, setScreen] = useState<
     'lobby' | 'bomber' | 'multi' | 'records'
@@ -118,15 +119,18 @@ export function App() {
           </section>
         ) : screen === 'records' ? (
           <Records
+            initialGame={selectedGame}
             profile={profile}
             onBack={() => setScreen('lobby')}
-            onChallenge={(_game, mode) => {
+            onChallenge={(game, mode) => {
+              setSelectedGame(game);
               setRunMode(mode);
               setScreen('bomber');
             }}
           />
         ) : screen === 'multi' ? (
           <Multiplayer
+            game={selectedGame}
             player={profile.player}
             onBack={() => {
               setScreen('lobby');
@@ -135,6 +139,8 @@ export function App() {
           />
         ) : screen === 'bomber' ? (
           <SingleGame
+            key={`${selectedGame}:${runMode}`}
+            game={selectedGame}
             mode={runMode}
             profile={profile}
             onBack={() => {
@@ -180,22 +186,22 @@ export function App() {
                       <button
                         type="button"
                         className="primary"
-                        disabled={game !== 'bomber'}
                         onClick={() => {
+                          setSelectedGame(game);
                           setRunMode('normal');
                           setScreen('bomber');
                         }}
                       >
-                        {game === 'bomber' ? '싱글 플레이' : '싱글 준비 중'}
+                        싱글 플레이
                       </button>
                       <button
                         type="button"
-                        disabled={game !== 'bomber'}
-                        onClick={() => setScreen('multi')}
+                        onClick={() => {
+                          setSelectedGame(game);
+                          setScreen('multi');
+                        }}
                       >
-                        {game === 'bomber'
-                          ? '친구와 대전'
-                          : '친구와 대전 준비 중'}
+                        친구와 대전
                       </button>
                     </div>
                   </div>

@@ -5,6 +5,7 @@ import {
   stepBomber,
 } from '../../core/bomber/game';
 import { RULES_VERSION, TICK_MS } from '../../core/random';
+import { createRunner, rankRunners, stepRunner } from '../../core/runner/game';
 import { isGame, isObject } from '../../shared/contracts';
 import {
   IDLE_MS,
@@ -83,11 +84,7 @@ export class GameRoom extends DurableObject<Env> {
         if (this.room)
           throw new HttpError(409, '초대 코드를 다시 발급해 주세요.');
         const data = await body(request);
-        if (
-          !isGame(data.game) ||
-          data.game !== 'bomber' ||
-          typeof data.code !== 'string'
-        )
+        if (!isGame(data.game) || typeof data.code !== 'string')
           throw new HttpError(400, '게임을 선택해 주세요.');
         this.room = {
           code: data.code,
@@ -216,12 +213,20 @@ export class GameRoom extends DurableObject<Env> {
         room.phase = 'countdown';
         room.matchId = crypto.randomUUID();
         room.startedAt = Date.now() + 2000;
-        room.state = createBomber(
-          room.seed,
-          1,
-          room.members.map((m) => m.id),
-          true,
-        );
+        room.state =
+          room.game === 'bomber'
+            ? createBomber(
+                room.seed,
+                1,
+                room.members.map((m) => m.id),
+                true,
+              )
+            : createRunner(
+                room.seed,
+                3,
+                room.members.map((m) => m.id),
+                true,
+              );
         room.results = [];
         room.saved = false;
         room.notice = '모두 같은 시각에 시작합니다.';
@@ -321,7 +326,8 @@ export class GameRoom extends DurableObject<Env> {
       const inputs: Record<string, BomberInput> = {};
       for (const [id, input] of Object.entries(this.inputs))
         if (Date.now() - input.at < 250) inputs[id] = input.value;
-      stepBomber(room.state, inputs);
+      if (room.state.kind === 'bomber') stepBomber(room.state, inputs);
+      else stepRunner(room.state, inputs);
     }
     if (room.state.status !== 'playing') {
       void this.finish(false);
@@ -340,6 +346,8 @@ export class GameRoom extends DurableObject<Env> {
     room.notice = aborted
       ? '서버 실행이 중단되어 승패 없이 종료했습니다.'
       : '친선 경기가 끝났어요.';
+    const runnerRanks =
+      room.state?.kind === 'runner' ? rankRunners(room.state.players) : null;
     room.results = room.members.map((m) => {
       const p = room.state?.players.find((p) => p.id === m.id);
       const win = room.state?.winners.includes(m.id) ?? false;
@@ -347,9 +355,18 @@ export class GameRoom extends DurableObject<Env> {
       return {
         playerId: m.id,
         name: m.name,
-        rank: aborted || draw ? 1 : win ? 1 : 2,
+        rank: aborted
+          ? 1
+          : (runnerRanks?.find((r) => r.id === m.id)?.rank ??
+            (draw ? 1 : win ? 1 : 2)),
         score: p?.score ?? 0,
-        outcome: aborted ? 'aborted' : draw ? 'draw' : win ? 'win' : 'loss',
+        outcome: aborted
+          ? 'aborted'
+          : draw && (!runnerRanks || win)
+            ? 'draw'
+            : win
+              ? 'win'
+              : 'loss',
       };
     });
     await this.persist();

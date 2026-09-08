@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { BomberInput, BomberState } from '../core/bomber/game';
-import { isObject, type Player } from '../shared/contracts';
+import { type GameKind, isObject, type Player } from '../shared/contracts';
 import { type RoomCommand, type RoomView, readRoom } from '../shared/room';
 import { api } from './api';
+import { RunnerCanvas } from './RunnerCanvas';
+import { RunnerStatus } from './RunnerStatus';
 
 function Arena({
   state,
@@ -67,8 +69,10 @@ function Arena({
 export function Multiplayer({
   player,
   onBack,
+  game = 'bomber',
 }: {
   player: Player;
+  game?: GameKind;
   onBack: () => void;
 }) {
   const [code, setCode] = useState(
@@ -82,6 +86,30 @@ export function Multiplayer({
   const socket = useRef<WebSocket | null>(null),
     seq = useRef(0);
   const roomCode = room?.code;
+  const activeGame = room?.game ?? game;
+  const [assetsReady, setAssetsReady] = useState(false);
+  useEffect(() => {
+    let active = true;
+    setAssetsReady(false);
+    Promise.all([
+      import('phaser'),
+      activeGame === 'bomber'
+        ? import('../games/bomber/scene')
+        : import('../games/runner/scene'),
+    ])
+      .then(() => {
+        if (active) setAssetsReady(true);
+      })
+      .catch(() => {
+        if (active)
+          setError(
+            '게임 파일을 불러오지 못했습니다. 새로고침 후 다시 연결해 주세요.',
+          );
+      });
+    return () => {
+      active = false;
+    };
+  }, [activeGame]);
   useEffect(() => {
     if (!roomCode) return;
     let disposed = false,
@@ -150,7 +178,7 @@ export function Multiplayer({
       const r = readRoom(
         await api(
           create ? '/rooms' : `/rooms/${code.trim().toUpperCase()}/join`,
-          create ? { game: 'bomber' } : {},
+          create ? { game } : {},
         ),
       );
       setRoom(r);
@@ -184,7 +212,10 @@ export function Multiplayer({
     <>
       <div className="toolbar">
         <h1>
-          팡팡 아레나 <span className="muted">· 친구와 대전</span>
+          {room?.game === 'runner' || (!room && game === 'runner')
+            ? '바람 러너'
+            : '팡팡 아레나'}{' '}
+          <span className="muted">· 친구와 대전</span>
         </h1>
         <button type="button" disabled={busy} onClick={() => void leave()}>
           로비로 나가기
@@ -274,13 +305,20 @@ export function Multiplayer({
                   <span>
                     {m.id === room.hostId ? '방장 · ' : ''}
                     {m.connected
-                      ? live
-                        ? room.state?.players.find((p) => p.id === m.id)?.alive
-                          ? '생존'
-                          : '탈락 · 관전'
-                        : m.ready
-                          ? '준비 완료'
-                          : '준비 대기'
+                      ? room.phase === 'ended'
+                        ? '경기 종료'
+                        : live
+                          ? room.state?.kind === 'runner' &&
+                            room.state.players.find((p) => p.id === m.id)
+                              ?.finishedAt !== null
+                            ? '완주 · 관전'
+                            : room.state?.players.find((p) => p.id === m.id)
+                                  ?.alive
+                              ? '생존'
+                              : '탈락 · 관전'
+                          : m.ready
+                            ? '준비 완료'
+                            : '준비 대기'
                       : '재접속 대기 (15초)'}
                   </span>
                 </div>
@@ -296,13 +334,17 @@ export function Multiplayer({
                 <button
                   type="button"
                   className="primary"
-                  disabled={status !== '연결됨'}
+                  disabled={status !== '연결됨' || !assetsReady}
                   onClick={() => {
                     setError('');
                     send({ type: 'ready', ready: !me?.ready });
                   }}
                 >
-                  {me?.ready ? '준비 취소' : '준비하기'}
+                  {!assetsReady
+                    ? '게임 준비 중…'
+                    : me?.ready
+                      ? '준비 취소'
+                      : '준비하기'}
                 </button>
                 {host && (
                   <button
@@ -320,9 +362,13 @@ export function Multiplayer({
                 )}
               </div>
               <p>
-                방향키 이동 · Space 폭탄. 마지막 생존자가 승리합니다.
+                {room.game === 'bomber'
+                  ? '방향키 이동 · Space 폭탄. 마지막 생존자가 승리합니다.'
+                  : '자동 달리기 · Space 점프 · 갈림길 ↑↓ 선택. 완주 시간으로 순위를 결정합니다.'}
                 <br />
-                동시 전멸 또는 90초 시간 초과는 무승부입니다.
+                {room.game === 'bomber'
+                  ? '동시 전멸 또는 90초 시간 초과는 무승부입니다.'
+                  : '미완주는 진행 거리순이며 같은 거리·같은 완주 시간은 공동 순위입니다.'}
               </p>
             </section>
           )}
@@ -332,23 +378,44 @@ export function Multiplayer({
                 <strong data-testid="multiplayer-time">
                   {Math.max(0, 90 - Math.floor(room.state.tick / 20))}초
                 </strong>
-                <span data-testid="my-position">
-                  내 위치{' '}
-                  {(room.state.players.find((p) => p.id === player.id)?.x ??
-                    0) + 1}
-                  ,{' '}
-                  {(room.state.players.find((p) => p.id === player.id)?.y ??
-                    0) + 1}
-                </span>
+                {room.state.kind === 'bomber' && (
+                  <span data-testid="my-position">
+                    내 위치{' '}
+                    {(room.state.players.find((p) => p.id === player.id)?.x ??
+                      0) + 1}
+                    ,{' '}
+                    {(room.state.players.find((p) => p.id === player.id)?.y ??
+                      0) + 1}
+                  </span>
+                )}
                 {!alive && <strong>탈락했습니다. 관전 중입니다.</strong>}
               </div>
-              <Arena
-                state={room.state}
-                send={input}
-                active={
-                  room.phase === 'playing' && alive && status === '연결됨'
-                }
-              />
+              {room.state.kind === 'bomber' ? (
+                <Arena
+                  state={room.state}
+                  send={input}
+                  active={
+                    room.phase === 'playing' && alive && status === '연결됨'
+                  }
+                />
+              ) : (
+                <>
+                  <RunnerStatus state={room.state} playerId={player.id} />
+                  <RunnerCanvas
+                    state={room.state}
+                    paused={
+                      room.phase !== 'playing' ||
+                      !alive ||
+                      status !== '연결됨' ||
+                      room.state.players.find((p) => p.id === player.id)
+                        ?.finishedAt !== null
+                    }
+                    send={input}
+                    playerId={player.id}
+                    onTick={() => {}}
+                  />
+                </>
+              )}
             </>
           )}
           {room.phase === 'ended' && (
@@ -360,7 +427,7 @@ export function Multiplayer({
               <ol className="result-list">
                 {room.results.map((r) => (
                   <li key={r.playerId}>
-                    {r.name} ·{' '}
+                    {r.rank}위 · {r.name} ·{' '}
                     {r.outcome === 'win'
                       ? '승리'
                       : r.outcome === 'loss'

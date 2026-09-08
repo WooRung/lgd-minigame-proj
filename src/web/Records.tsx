@@ -40,12 +40,14 @@ export function Records({
   profile,
   onBack,
   onChallenge,
+  initialGame = 'bomber',
 }: {
   profile: Profile;
+  initialGame?: GameKind;
   onBack: () => void;
   onChallenge: (game: GameKind, mode: 'daily' | 'weekly') => void;
 }) {
-  const [game, setGame] = useState<GameKind>('bomber'),
+  const [game, setGame] = useState<GameKind>(initialGame),
     [mode, setMode] = useState<'daily' | 'weekly'>('daily'),
     [board, setBoard] = useState<Leaderboard | null>(null),
     [history, setHistory] = useState<HistoryRow[]>([]),
@@ -92,9 +94,7 @@ export function Records({
             }
           >
             <option value="bomber">팡팡 아레나</option>
-            <option value="runner" disabled>
-              바람 러너 (준비 중)
-            </option>
+            <option value="runner">바람 러너</option>
           </select>
         </label>
         <label>

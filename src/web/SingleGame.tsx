@@ -6,9 +6,12 @@ import {
   stepBomber,
 } from '../core/bomber/game';
 import { TICK_MS } from '../core/random';
-import type { Profile } from '../shared/contracts';
+import { createRunner, type RunnerState } from '../core/runner/game';
+import type { GameKind, Profile } from '../shared/contracts';
 import { type Run, type RunMode, readRun } from '../shared/runs';
 import { api } from './api';
+import { RunnerCanvas } from './RunnerCanvas';
+import { RunnerStatus } from './RunnerStatus';
 
 function BomberCanvas({
   state,
@@ -83,19 +86,21 @@ export function SingleGame({
   onBack,
   onSaved,
   mode = 'normal',
+  game = 'bomber',
 }: {
   profile: Profile;
   mode?: RunMode;
+  game?: GameKind;
   onBack: () => void;
   onSaved: () => void;
 }) {
   const completed =
-    profile.progress.find((p) => p.game === 'bomber')?.completed_stage ?? 0;
+    profile.progress.find((p) => p.game === game)?.completed_stage ?? 0;
   const [stage, setStage] = useState(
     mode === 'normal' ? Math.min(5, completed + 1) : 3,
   );
   const [run, setRun] = useState<Run | null>(null),
-    [state, setState] = useState<BomberState | null>(null);
+    [state, setState] = useState<BomberState | RunnerState | null>(null);
   const [paused, setPaused] = useState(false),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(''),
@@ -111,7 +116,7 @@ export function SingleGame({
     try {
       const r = readRun(
         await api('/runs', {
-          game: 'bomber',
+          game,
           mode,
           stage: nextStage,
           ...(retry && run ? { retryOf: run.id } : {}),
@@ -119,7 +124,11 @@ export function SingleGame({
       );
       setRun(r);
       setStage(nextStage);
-      setState(createBomber(r.seed, r.stage, ['single']));
+      setState(
+        game === 'bomber'
+          ? createBomber(r.seed, r.stage, ['single'])
+          : createRunner(r.seed, r.stage, ['single']),
+      );
       submitted.current = null;
     } catch (e) {
       setError(e instanceof Error ? e.message : '시작할 수 없습니다.');
@@ -168,7 +177,7 @@ export function SingleGame({
     <>
       <div className="toolbar">
         <h1>
-          팡팡 아레나{' '}
+          {game === 'bomber' ? '팡팡 아레나' : '바람 러너'}{' '}
           <span className="muted">
             ·{' '}
             {mode === 'normal'
@@ -194,10 +203,15 @@ export function SingleGame({
       )}
       {!state ? (
         <section className="panel stack">
-          <h2>출구까지 나만의 길을 만드세요.</h2>
+          <h2>
+            {game === 'bomber'
+              ? '출구까지 나만의 길을 만드세요.'
+              : '바람을 타고 결승선까지 달려요.'}
+          </h2>
           <p>
-            금빛 출구 위 상자를 폭탄으로 부수고 도착하면 완료! 폭탄을 놓은
-            뒤에는 두 칸 밖으로 피하세요.
+            {game === 'bomber'
+              ? '금빛 출구 위 상자를 폭탄으로 부수고 도착하면 완료! 폭탄을 놓은 뒤에는 두 칸 밖으로 피하세요.'
+              : '자동으로 달립니다. Space로 장애물과 틈을 뛰어넘고 결승선에 도착하세요. 금빛 수집물을 얻으면 잠시 빨라집니다.'}
           </p>
           <div className="stages" aria-label="단계 선택">
             {[1, 2, 3, 4, 5].map((n) => (
@@ -213,13 +227,24 @@ export function SingleGame({
             ))}
           </div>
           <p className="instructions">
-            방향키: 이동 · Space: 폭탄 설치
+            {game === 'bomber' ? (
+              <>
+                방향키: 이동 · Space: 폭탄 설치
+                <br />
+                폭탄은 1.8초 뒤 두 칸 폭발합니다. 2단계부터 범위 아이템,
+                4단계부터 위험 타일이 등장합니다.
+              </>
+            ) : (
+              <>
+                Space: 점프 · 갈림길에서 ↑↓: 길 선택
+                <br />
+                2단계부터 틈, 3단계부터 갈림길, 4단계부터 움직이는 발판이
+                등장합니다. 점프를 길게 누르면 연속 점프하지 않으므로 다시 눌러
+                주세요.
+              </>
+            )}
             <br />
-            폭탄은 1.8초 뒤 십자 방향으로 두 칸 폭발합니다. 적과 불꽃을
-            피하세요.
-            <br />
-            2단계부터 금빛 아이템(폭발 3칸), 4단계부터 깜박이는 위험 타일이
-            등장합니다. 제한 시간 90초.
+            제한 시간 90초.
           </p>
           <div>
             <button
@@ -235,7 +260,11 @@ export function SingleGame({
       ) : (
         <div className="play-layout">
           <div>
-            <BomberCanvas state={state} paused={paused} onTick={onTick} />
+            {state.kind === 'bomber' ? (
+              <BomberCanvas state={state} paused={paused} onTick={onTick} />
+            ) : (
+              <RunnerCanvas state={state} paused={paused} onTick={onTick} />
+            )}
             {ended && (
               <section className="result" role="status">
                 <h2>
@@ -284,16 +313,32 @@ export function SingleGame({
               {Math.ceil((BOMBER_LIMIT - state.tick) / 20)}초
             </div>
             <p>점수 {state.players[0]?.score ?? 0}</p>
-            <p data-testid="player-position">
-              위치 {(state.players[0]?.x ?? 0) + 1},{' '}
-              {(state.players[0]?.y ?? 0) + 1}
-            </p>
+            {state.kind === 'runner' ? (
+              <RunnerStatus state={state} playerId="single" />
+            ) : (
+              <p data-testid="player-position">
+                위치 {(state.players[0]?.x ?? 0) + 1},{' '}
+                {(state.players[0]?.y ?? 0) + 1}
+              </p>
+            )}
             <p className="instructions">
-              방향키 이동
-              <br />
-              Space 폭탄
-              <br />
-              금빛 출구에 도착하세요.
+              {game === 'bomber' ? (
+                <>
+                  방향키 이동
+                  <br />
+                  Space 폭탄
+                  <br />
+                  금빛 출구에 도착하세요.
+                </>
+              ) : (
+                <>
+                  Space 점프
+                  <br />
+                  갈림길 ↑↓ 선택
+                  <br />
+                  결승선까지 달려요.
+                </>
+              )}
             </p>
             <p className="muted">
               맵 {run?.seed}
