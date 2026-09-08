@@ -2,6 +2,7 @@ import { isGame, type Progress } from '../shared/contracts';
 import type { Env } from './env';
 import { body, checkOrigin, HttpError, json } from './http';
 import { history, leaderboard } from './rankings';
+import { limitSubmission, sessionSubject } from './rate-limit';
 import { roomRequest } from './rooms/router';
 import { finishRun, issueRun } from './runs';
 import {
@@ -18,6 +19,15 @@ export default {
     try {
       checkOrigin(request);
       const path = new URL(request.url).pathname;
+      if (request.method === 'POST' && path === '/api/session')
+        await limitSubmission(env, await sessionSubject(request), 60);
+      if (
+        request.method === 'POST' &&
+        (path.startsWith('/api/runs') || path.startsWith('/api/rooms'))
+      ) {
+        const player = await requirePlayer(request, env);
+        await limitSubmission(env, `play:${player.id}`, 40);
+      }
       if (path === '/api/me' && request.method === 'GET') {
         const player = await getPlayer(request, env);
         const progress = player
@@ -100,6 +110,9 @@ export default {
               : '서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.',
         },
         error instanceof HttpError ? error.status : 500,
+        error instanceof HttpError && error.status === 429
+          ? { 'Retry-After': '60' }
+          : {},
       );
     }
   },

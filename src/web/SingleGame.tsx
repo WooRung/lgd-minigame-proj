@@ -8,8 +8,9 @@ import {
 import { TICK_MS } from '../core/random';
 import { createRunner, type RunnerState } from '../core/runner/game';
 import type { GameKind, Profile } from '../shared/contracts';
+import { readHistory } from '../shared/rankings';
 import { type Run, type RunMode, readRun } from '../shared/runs';
-import { api } from './api';
+import { ApiError, api } from './api';
 import { RunnerCanvas } from './RunnerCanvas';
 import { RunnerStatus } from './RunnerStatus';
 
@@ -114,6 +115,12 @@ export function SingleGame({
     setSaved(false);
     setPaused(false);
     try {
+      await Promise.all([
+        import('phaser'),
+        game === 'bomber'
+          ? import('../games/bomber/scene')
+          : import('../games/runner/scene'),
+      ]);
       const r = readRun(
         await api('/runs', {
           game,
@@ -149,6 +156,26 @@ export function SingleGame({
       setSaved(true);
       onSaved();
     } catch (e) {
+      // 성공 응답만 유실된 재시도는 소유자 전용 기록 조회로 확인한다.
+      if (e instanceof ApiError && e.status === 409) {
+        try {
+          const record = readHistory(await api(`/history?game=${game}`)).find(
+            (h) => h.id === run.id,
+          );
+          if (
+            record &&
+            record.ticks === state.tick &&
+            record.score === state.players[0]?.score &&
+            record.outcome === (state.status === 'won' ? '완료' : '실패')
+          ) {
+            setSaved(true);
+            onSaved();
+            return;
+          }
+        } catch {
+          /* 원래 저장 오류를 표시하고 다시 시도할 수 있게 한다. */
+        }
+      }
       setError(e instanceof Error ? e.message : '저장할 수 없습니다.');
     } finally {
       setBusy(false);
@@ -195,7 +222,7 @@ export function SingleGame({
         <div role="alert" className="notice error">
           {error}
           {ended && !saved && (
-            <button type="button" onClick={() => void save()}>
+            <button type="button" disabled={busy} onClick={() => void save()}>
               저장 재시도
             </button>
           )}
@@ -283,7 +310,7 @@ export function SingleGame({
                 <div className="row" style={{ justifyContent: 'center' }}>
                   <button
                     type="button"
-                    disabled={busy}
+                    disabled={!saved || busy}
                     onClick={() => void start(true)}
                   >
                     같은 맵 재도전

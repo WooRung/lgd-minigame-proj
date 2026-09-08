@@ -195,12 +195,12 @@ export function Multiplayer({
     setError('');
     try {
       if (room) await api(`/rooms/${room.code}/leave`, {});
-      history.replaceState(null, '', '/');
-      onBack();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : '퇴장할 수 없습니다.');
+    } catch {
+      // 서버 장애/만료 상태에서도 로비로 돌아간다. 소켓 종료 후 서버 유예가 정리한다.
     } finally {
       setBusy(false);
+      history.replaceState(null, '', '/');
+      onBack();
     }
   }
   const me = room?.members.find((m) => m.id === player.id),

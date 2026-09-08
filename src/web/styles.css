@@ -1,6 +1,6 @@
-@import url("https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800;900&display=swap");
 :root {
-  font-family: "Noto Sans KR", system-ui, sans-serif;
+  font-family:
+    system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
   color: #242724;
   background: #f8f6ef;
   font-synthesis: none;
