@@ -1,12 +1,20 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { type Profile, readProfile } from '../shared/contracts';
 import { api } from './api';
+import { SingleGame } from './SingleGame';
 
 export function App() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [name, setName] = useState('');
+  const [screen, setScreen] = useState<'lobby' | 'bomber'>('lobby');
+  const refresh = useCallback(() => {
+    api('/me')
+      .then(readProfile)
+      .then(setProfile)
+      .catch((e) => setError(e.message));
+  }, []);
   useEffect(() => {
     let active = true;
     api('/me')
@@ -102,6 +110,15 @@ export function App() {
               </small>
             </form>
           </section>
+        ) : screen === 'bomber' ? (
+          <SingleGame
+            profile={profile}
+            onBack={() => {
+              setScreen('lobby');
+              refresh();
+            }}
+            onSaved={refresh}
+          />
         ) : (
           <>
             <section className="intro">
@@ -136,8 +153,13 @@ export function App() {
                       </p>
                     </div>
                     <div className="game-actions">
-                      <button type="button" className="primary" disabled>
-                        싱글 준비 중
+                      <button
+                        type="button"
+                        className="primary"
+                        disabled={game !== 'bomber'}
+                        onClick={() => setScreen('bomber')}
+                      >
+                        {game === 'bomber' ? '싱글 플레이' : '싱글 준비 중'}
                       </button>
                       <button type="button" disabled>
                         친구와 대전 준비 중
@@ -158,7 +180,14 @@ export function App() {
               <div>
                 <h2>내 진행도</h2>
                 <p className="empty">
-                  첫 모험을 기다리고 있어요.
+                  {profile.progress.length
+                    ? profile.progress
+                        .map(
+                          (p) =>
+                            `${p.game === 'bomber' ? '팡팡 아레나' : '바람 러너'} ${p.completed_stage}/5단계 완료`,
+                        )
+                        .join(' · ')
+                    : '첫 모험을 기다리고 있어요.'}
                   <span>완료한 단계는 자동으로 저장됩니다.</span>
                 </p>
               </div>

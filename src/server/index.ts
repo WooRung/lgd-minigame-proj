@@ -1,7 +1,13 @@
 import type { Progress } from '../shared/contracts';
 import type { Env } from './env';
 import { body, checkOrigin, HttpError, json } from './http';
-import { createPlayer, getPlayer, normalizeName } from './session';
+import { finishRun, issueRun } from './runs';
+import {
+  createPlayer,
+  getPlayer,
+  normalizeName,
+  requirePlayer,
+} from './session';
 
 export { GameRoom } from './rooms/game-room';
 
@@ -44,6 +50,16 @@ export default {
         );
         return json({ player, progress: [] }, 201, { 'Set-Cookie': cookie });
       }
+      if (path === '/api/runs' && request.method === 'POST')
+        return await issueRun(request, env, await requirePlayer(request, env));
+      const finish = /^\/api\/runs\/([a-zA-Z0-9-]+)\/finish$/.exec(path);
+      if (finish?.[1] && request.method === 'POST')
+        return await finishRun(
+          request,
+          env,
+          await requirePlayer(request, env),
+          finish[1],
+        );
       return json({ error: '요청한 기능을 찾을 수 없습니다.' }, 404);
     } catch (error) {
       return json(
