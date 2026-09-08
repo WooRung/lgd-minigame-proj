@@ -1,6 +1,7 @@
 import type { Progress } from '../shared/contracts';
 import type { Env } from './env';
 import { body, checkOrigin, HttpError, json } from './http';
+import { roomRequest } from './rooms/router';
 import { finishRun, issueRun } from './runs';
 import {
   createPlayer,
@@ -50,6 +51,12 @@ export default {
         );
         return json({ player, progress: [] }, 201, { 'Set-Cookie': cookie });
       }
+      if (path === '/api/rooms' || path.startsWith('/api/rooms/'))
+        return await roomRequest(
+          request,
+          env,
+          await requirePlayer(request, env),
+        );
       if (path === '/api/runs' && request.method === 'POST')
         return await issueRun(request, env, await requirePlayer(request, env));
       const finish = /^\/api\/runs\/([a-zA-Z0-9-]+)\/finish$/.exec(path);

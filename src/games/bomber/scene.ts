@@ -4,6 +4,8 @@ import { HEIGHT, index, WIDTH } from '../../core/bomber/map';
 export const COLORS = [0xef7045, 0x168577, 0x537bd1, 0xba69a6];
 export class BomberScene extends Phaser.Scene {
   private actionQueued = false;
+  private displayPositions = new Map<string, { x: number; y: number }>();
+  private frameDelta = 16;
   private graphics?: Phaser.GameObjects.Graphics;
   private keys?: {
     left: Phaser.Input.Keyboard.Key;
@@ -15,6 +17,7 @@ export class BomberScene extends Phaser.Scene {
   constructor(
     private getState: () => BomberState,
     private onFrame: (delta: number, input: BomberInput) => boolean,
+    private onReady: () => void = () => {},
   ) {
     super('bomber');
   }
@@ -33,8 +36,10 @@ export class BomberScene extends Phaser.Scene {
         action: keyboard.addKey('SPACE'),
       };
     }
+    this.onReady();
   }
   update(_time: number, delta: number) {
+    this.frameDelta = delta;
     const k = this.keys;
     const consumed = this.onFrame(delta, {
       dx: k?.left.isDown ? -1 : k?.right.isDown ? 1 : 0,
@@ -136,8 +141,13 @@ export class BomberScene extends Phaser.Scene {
       g.fillCircle(x + 6, y - 2, 4);
     }
     s.players.forEach((p, i) => {
-      const x = ox + p.x * t + 28,
-        y = oy + p.y * t + 27;
+      const display = this.displayPositions.get(p.id) ?? { x: p.x, y: p.y };
+      const factor = Math.min(1, this.frameDelta / 60);
+      display.x += (p.x - display.x) * factor;
+      display.y += (p.y - display.y) * factor;
+      this.displayPositions.set(p.id, display);
+      const x = ox + display.x * t + 28,
+        y = oy + display.y * t + 27;
       g.fillStyle(0x244c39, 0.2);
       g.fillEllipse(x, y + 19, 35, 12);
       g.fillStyle(

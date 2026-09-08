@@ -38,6 +38,7 @@ describe('폭탄 맵과 규칙', () => {
     ];
     stepBomber(s, {});
     expect(s.bombs).toHaveLength(0);
+    expect(s.players[0]?.score).toBe(50);
     expect(s.map.tiles[index(3, 1)]).toBe(0);
     expect(s.flames.some((f) => f.x === 4 && f.y === 1)).toBe(false);
     expect(s.status).toBe('lost');

@@ -529,3 +529,47 @@ tr.mine {
     padding: 18px;
   }
 }
+
+.room-top {
+  margin-bottom: 18px;
+}
+.invite-code {
+  font-size: 25px;
+  letter-spacing: 3px;
+  margin-left: 12px;
+}
+.members {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+}
+.member {
+  border: 1px solid var(--line);
+  border-left: 5px solid var(--orange);
+  border-radius: 10px;
+  background: var(--surface);
+  padding: 16px;
+}
+.member span {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 6px;
+}
+.color-1 {
+  border-left-color: var(--teal);
+}
+.color-2 {
+  border-left-color: #537bd1;
+}
+.color-3 {
+  border-left-color: #ba69a6;
+}
+.result-list {
+  list-style: none;
+  padding: 0;
+  line-height: 2;
+}
+.row + .game-canvas {
+  margin-top: 16px;
+}

@@ -84,9 +84,11 @@ function detonate(state: BomberState, bomb: Bomb, blockers: readonly number[]) {
       if (tile === 1) break;
       cells.push({ x, y });
       if (tile === 2) {
-        state.map.tiles[index(x, y)] = 0;
-        const owner = state.players.find((p) => p.id === bomb.owner);
-        if (owner) owner.score += 50;
+        if (state.map.tiles[index(x, y)] === 2) {
+          state.map.tiles[index(x, y)] = 0;
+          const owner = state.players.find((p) => p.id === bomb.owner);
+          if (owner) owner.score += 50;
+        }
         break;
       }
     }

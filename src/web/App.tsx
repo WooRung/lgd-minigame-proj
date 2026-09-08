@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { type Profile, readProfile } from '../shared/contracts';
 import { api } from './api';
+import { Multiplayer } from './Multiplayer';
 import { SingleGame } from './SingleGame';
 
 export function App() {
@@ -8,7 +9,9 @@ export function App() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [name, setName] = useState('');
-  const [screen, setScreen] = useState<'lobby' | 'bomber'>('lobby');
+  const [screen, setScreen] = useState<'lobby' | 'bomber' | 'multi'>(
+    new URL(location.href).searchParams.has('room') ? 'multi' : 'lobby',
+  );
   const refresh = useCallback(() => {
     api('/me')
       .then(readProfile)
@@ -110,6 +113,14 @@ export function App() {
               </small>
             </form>
           </section>
+        ) : screen === 'multi' ? (
+          <Multiplayer
+            player={profile.player}
+            onBack={() => {
+              setScreen('lobby');
+              refresh();
+            }}
+          />
         ) : screen === 'bomber' ? (
           <SingleGame
             profile={profile}
@@ -161,8 +172,14 @@ export function App() {
                       >
                         {game === 'bomber' ? '싱글 플레이' : '싱글 준비 중'}
                       </button>
-                      <button type="button" disabled>
-                        친구와 대전 준비 중
+                      <button
+                        type="button"
+                        disabled={game !== 'bomber'}
+                        onClick={() => setScreen('multi')}
+                      >
+                        {game === 'bomber'
+                          ? '친구와 대전'
+                          : '친구와 대전 준비 중'}
                       </button>
                     </div>
                   </div>
