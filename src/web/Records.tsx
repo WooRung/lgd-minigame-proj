@@ -215,7 +215,16 @@ export function Records({
                   {game === 'runner'
                     ? '이전 규칙의 개인 최고'
                     : '일반 싱글 개인 최고'}{' '}
-                  {progress?.best_score ?? 0}점
+                  {(game === 'runner'
+                    ? progress?.best_score
+                    : progress?.current_best_score) ?? 0}
+                  점
+                  {game === 'bomber' && (
+                    <small style={{ display: 'block' }}>
+                      이전 규칙의 개인 최고 {progress?.best_score ?? 0}점 · 새
+                      기록과 분리 보관
+                    </small>
+                  )}
                 </p>
                 <small>
                   {game === 'runner'

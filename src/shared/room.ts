@@ -1,5 +1,10 @@
 import type { BomberInput, BomberState } from '../core/bomber/game';
-import { HEIGHT, WIDTH } from '../core/bomber/map';
+import {
+  BOMBER_GENERATOR_VERSION,
+  BOMBER_RULES_VERSION,
+  HEIGHT,
+  WIDTH,
+} from '../core/bomber/map';
 import type { EndlessState as RunnerState } from '../core/runner/endless';
 import { type GameKind, isGame, isObject } from './contracts';
 import { isEndlessState } from './runner-state';
@@ -101,7 +106,25 @@ function cell(v: unknown): boolean {
     v.y < HEIGHT
   );
 }
-function cells(v: unknown, max = 200): boolean {
+function actor(v: unknown): boolean {
+  return (
+    isObject(v) &&
+    finite(v.x) &&
+    finite(v.y) &&
+    v.x >= 0.77 &&
+    v.x <= WIDTH - 1.77 &&
+    v.y >= 0.77 &&
+    v.y <= HEIGHT - 1.77
+  );
+}
+function item(v: unknown): boolean {
+  return (
+    isObject(v) &&
+    cell(v) &&
+    ['capacity', 'range', 'speed'].includes(String(v.kind))
+  );
+}
+function cells(v: unknown, max = WIDTH * HEIGHT): boolean {
   return Array.isArray(v) && v.length <= max && v.every(cell);
 }
 function isBomberState(s: unknown): s is BomberState {
@@ -119,17 +142,34 @@ function isBomberState(s: unknown): s is BomberState {
   if (
     !integer(m.seed) ||
     !integer(m.stage) ||
-    typeof m.generatorVersion !== 'string' ||
-    typeof m.rulesVersion !== 'string' ||
+    m.generatorVersion !== BOMBER_GENERATOR_VERSION ||
+    m.rulesVersion !== BOMBER_RULES_VERSION ||
     typeof m.fallback !== 'boolean' ||
     !Array.isArray(m.tiles) ||
     m.tiles.length !== WIDTH * HEIGHT ||
     !m.tiles.every((t) => t === 0 || t === 1 || t === 2) ||
     !cells(m.spawns, 4) ||
     !cell(m.exit) ||
-    !cells(m.enemies) ||
+    !Array.isArray(m.enemies) ||
+    m.enemies.length > 7 ||
+    !m.enemies.every(
+      (e) =>
+        isObject(e) &&
+        actor(e) &&
+        integer(e.id) &&
+        cell(e.target) &&
+        integer(e.waitUntil),
+    ) ||
     !cells(m.hazards) ||
-    !cells(m.items)
+    !Array.isArray(m.hiddenItems) ||
+    m.hiddenItems.length > WIDTH * HEIGHT ||
+    !m.hiddenItems.every(item) ||
+    !Array.isArray(m.items) ||
+    m.items.length > WIDTH * HEIGHT ||
+    !m.items.every(
+      (i) =>
+        isObject(i) && item(i) && integer(i.bornAt) && integer(i.availableAt),
+    )
   )
     return false;
   if (
@@ -138,11 +178,23 @@ function isBomberState(s: unknown): s is BomberState {
     !s.players.every(
       (p) =>
         isObject(p) &&
-        cell(p) &&
+        actor(p) &&
         typeof p.id === 'string' &&
         typeof p.alive === 'boolean' &&
-        integer(p.cooldown) &&
         integer(p.range) &&
+        p.range >= 1 &&
+        p.range <= 6 &&
+        p.range >= 1 &&
+        p.range <= 6 &&
+        integer(p.capacity) &&
+        p.capacity >= 1 &&
+        p.capacity <= 5 &&
+        finite(p.speed) &&
+        p.speed > 0 &&
+        p.speed <= 0.26 &&
+        (p.pickup === null ||
+          ['capacity', 'range', 'speed'].includes(String(p.pickup))) &&
+        integer(p.pickupAt) &&
         integer(p.score) &&
         typeof p.placed === 'boolean',
     )
@@ -150,7 +202,7 @@ function isBomberState(s: unknown): s is BomberState {
     return false;
   if (
     !Array.isArray(s.bombs) ||
-    s.bombs.length > 8 ||
+    s.bombs.length > 20 ||
     !s.bombs.every(
       (b) =>
         isObject(b) &&
@@ -164,7 +216,7 @@ function isBomberState(s: unknown): s is BomberState {
     return false;
   return (
     Array.isArray(s.flames) &&
-    s.flames.length <= 200 &&
+    s.flames.length <= WIDTH * HEIGHT &&
     s.flames.every((f) => isObject(f) && cell(f) && integer(f.until))
   );
 }

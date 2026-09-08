@@ -15,6 +15,7 @@ import type { GameKind, Profile } from '../shared/contracts';
 import { readHistory } from '../shared/rankings';
 import { type Run, type RunMode, readRun } from '../shared/runs';
 import { ApiError, api } from './api';
+import { BomberStatus } from './BomberStatus';
 import { RunnerCanvas } from './RunnerCanvas';
 import { RunnerStatus } from './RunnerStatus';
 
@@ -57,10 +58,10 @@ function BomberCanvas({
           },
         );
         game = new Phaser.Game({
-          type: Phaser.AUTO,
+          type: Phaser.CANVAS,
           parent: host.current,
-          width: 640,
-          height: 528,
+          width: 952,
+          height: 728,
           backgroundColor: '#294d3c',
           scene: [scene],
           scale: {
@@ -274,8 +275,9 @@ export function SingleGame({
               <>
                 방향키: 이동 · Space: 폭탄 설치
                 <br />
-                폭탄은 1.8초 뒤 두 칸 폭발합니다. 2단계부터 범위 아이템,
-                4단계부터 위험 타일이 등장합니다.
+                폭탄은 1.8초 뒤 폭발합니다. 상자를 부수고 폭탄 수·범위·속도를
+                강화하세요. 단계별 적은 3~7마리이며 4단계부터 위험 타일이
+                등장합니다.
               </>
             ) : (
               <>
@@ -378,10 +380,7 @@ export function SingleGame({
             {state.kind === 'runner' ? (
               <RunnerStatus state={state} playerId="single" />
             ) : (
-              <p data-testid="player-position">
-                위치 {(state.players[0]?.x ?? 0) + 1},{' '}
-                {(state.players[0]?.y ?? 0) + 1}
-              </p>
+              <BomberStatus state={state} playerId="single" />
             )}
             <p className="instructions">
               {game === 'bomber' ? (

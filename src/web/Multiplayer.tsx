@@ -3,6 +3,7 @@ import type { BomberInput, BomberState } from '../core/bomber/game';
 import { type GameKind, isObject, type Player } from '../shared/contracts';
 import { type RoomCommand, type RoomView, readRoom } from '../shared/room';
 import { api } from './api';
+import { BomberStatus } from './BomberStatus';
 import { RunnerCanvas } from './RunnerCanvas';
 import { RunnerStatus } from './RunnerStatus';
 
@@ -21,28 +22,28 @@ function Arena({
   useEffect(() => {
     let disposed = false;
     let game: import('phaser').Game | undefined;
+    let inputTimer: ReturnType<typeof setInterval> | undefined;
     Promise.all([import('phaser'), import('../games/bomber/scene')]).then(
       ([{ default: Phaser }, { BomberScene }]) => {
         if (disposed || !host.current) return;
-        let elapsed = 0;
         const scene = new BomberScene(
           () => current.current.state,
-          (delta, input) => {
-            elapsed += delta;
-            if (elapsed < 50) return false;
-            elapsed = 0;
-            if (current.current.active) current.current.send(input);
-            return true;
-          },
+          () => false,
           () => {
             if (host.current) host.current.dataset.ready = 'true';
           },
         );
+        // 입력 전송은 그리기 속도와 분리한다. 저사양/다중 화면에서도 같은 20Hz를 유지한다.
+        inputTimer = setInterval(() => {
+          if (current.current.active) current.current.send(scene.readInput());
+          scene.consumeInput();
+        }, 50);
         game = new Phaser.Game({
-          type: Phaser.AUTO,
+          // 도형 기반 경기장은 Canvas를 사용해 다중 WebGL 재생성의 긴 멈춤을 피한다.
+          type: Phaser.CANVAS,
           parent: host.current,
-          width: 640,
-          height: 528,
+          width: 952,
+          height: 728,
           scene: [scene],
           scale: {
             mode: Phaser.Scale.FIT,
@@ -54,6 +55,7 @@ function Arena({
     );
     return () => {
       disposed = true;
+      clearInterval(inputTimer);
       game?.destroy(true);
     };
   }, []);
@@ -381,14 +383,7 @@ export function Multiplayer({
                   초
                 </strong>
                 {room.state.kind === 'bomber' && (
-                  <span data-testid="my-position">
-                    내 위치{' '}
-                    {(room.state.players.find((p) => p.id === player.id)?.x ??
-                      0) + 1}
-                    ,{' '}
-                    {(room.state.players.find((p) => p.id === player.id)?.y ??
-                      0) + 1}
-                  </span>
+                  <BomberStatus state={room.state} playerId={player.id} />
                 )}
                 {!alive && <strong>탈락했습니다. 관전 중입니다.</strong>}
               </div>

@@ -40,22 +40,29 @@ export class BomberScene extends Phaser.Scene {
   }
   update(_time: number, delta: number) {
     this.frameDelta = delta;
-    const k = this.keys;
-    const consumed = this.onFrame(delta, {
-      dx: k?.left.isDown ? -1 : k?.right.isDown ? 1 : 0,
-      dy: k?.up.isDown ? -1 : k?.down.isDown ? 1 : 0,
-      action: this.actionQueued || (k?.action.isDown ?? false),
-    });
+    const consumed = this.onFrame(delta, this.readInput());
     if (consumed) this.actionQueued = false;
     this.draw(this.getState());
+  }
+  readInput(): BomberInput {
+    const k = this.keys;
+    const dx = k?.left.isDown ? -1 : k?.right.isDown ? 1 : 0;
+    return {
+      dx,
+      dy: dx ? 0 : k?.up.isDown ? -1 : k?.down.isDown ? 1 : 0,
+      action: this.actionQueued || (k?.action.isDown ?? false),
+    };
+  }
+  consumeInput() {
+    this.actionQueued = false;
   }
   private draw(s: BomberState) {
     const g = this.graphics;
     if (!g) return;
     g.clear();
     const t = 56,
-      ox = 12,
-      oy = 12;
+      ox = 0,
+      oy = 0;
     for (let y = 0; y < HEIGHT; y++)
       for (let x = 0; x < WIDTH; x++) {
         const px = ox + x * t,
@@ -101,11 +108,32 @@ export class BomberScene extends Phaser.Scene {
       );
     }
     for (const item of s.map.items) {
-      g.fillStyle(0xffda65);
       const x = ox + item.x * t + 28,
         y = oy + item.y * t + 28;
-      g.fillTriangle(x, y - 14, x + 14, y, x, y + 14);
-      g.fillTriangle(x, y - 14, x - 14, y, x, y + 14);
+      const color =
+        item.kind === 'capacity'
+          ? 0x4b91d1
+          : item.kind === 'range'
+            ? 0xef8550
+            : 0xf1ce4b;
+      g.fillStyle(0xffffff, s.tick < item.availableAt ? 0.4 : 0.9);
+      g.fillCircle(x, y, 21 + Math.sin(s.tick / 3) * 2);
+      g.fillStyle(color);
+      g.fillRoundedRect(x - 16, y - 16, 32, 32, 8);
+      g.lineStyle(3, 0xffffff);
+      if (item.kind === 'capacity') {
+        g.strokeCircle(x, y, 9);
+        g.lineBetween(x - 4, y, x + 4, y);
+        g.lineBetween(x, y - 4, x, y + 4);
+      } else if (item.kind === 'range') {
+        g.lineBetween(x - 11, y, x + 11, y);
+        g.lineBetween(x, y - 11, x, y + 11);
+        g.strokeCircle(x, y, 5);
+      } else {
+        g.fillStyle(0xffffff);
+        g.fillTriangle(x + 2, y - 12, x - 9, y + 2, x + 3, y + 2);
+        g.fillTriangle(x - 2, y + 12, x + 9, y - 2, x - 3, y - 2);
+      }
     }
     for (const f of s.flames) {
       g.fillStyle(0xf18b34);

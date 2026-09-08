@@ -9,7 +9,7 @@ const run: StoredRun = {
   mode: 'normal',
   stage: 1,
   seed: 1,
-  rules_version: '1',
+  rules_version: '2',
   period: '',
   issued_at: 0,
   finished_at: null,
@@ -25,6 +25,7 @@ describe('싱글 결과 검증', () => {
   });
   it.each([
     { ticks: -1, score: 0, won: false },
+    { ticks: 60, score: 2790, won: true },
     { ticks: 20, score: 90000, won: true },
     { ticks: 1000, score: 2000, won: true },
     { ticks: 1, score: 1000, won: true },

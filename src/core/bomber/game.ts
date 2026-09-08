@@ -1,12 +1,23 @@
-import { random } from '../random';
+import { hashSeed, random } from '../random';
 import {
   type BomberMap,
   type Cell,
+  DIRECTIONS,
   generateMap,
+  gridCell,
+  type ItemKind,
   index,
   sameCell,
   tileAt,
 } from './map';
+import {
+  BASE_SPEED,
+  bodiesOverlap,
+  canOccupy,
+  MAX_SPEED,
+  moveBody,
+  touchesCell,
+} from './motion';
 export const BOMBER_LIMIT = 1800;
 export interface BomberInput {
   dx: number;
@@ -16,10 +27,13 @@ export interface BomberInput {
 export interface BomberPlayer extends Cell {
   id: string;
   alive: boolean;
-  cooldown: number;
   range: number;
+  capacity: number;
+  speed: number;
   score: number;
   placed: boolean;
+  pickup: ItemKind | null;
+  pickupAt: number;
 }
 export interface Bomb extends Cell {
   owner: string;
@@ -55,10 +69,13 @@ export function createBomber(
       id,
       ...(map.spawns[i] ?? { x: 1, y: 1 }),
       alive: true,
-      cooldown: 0,
       range: 2,
+      capacity: 2,
+      speed: BASE_SPEED,
       score: 0,
       placed: false,
+      pickup: null,
+      pickupAt: 0,
     })),
     bombs: [],
     flames: [],
@@ -71,15 +88,10 @@ export function createBomber(
 function detonate(state: BomberState, bomb: Bomb, blockers: readonly number[]) {
   state.bombs = state.bombs.filter((b) => b !== bomb);
   const cells: Cell[] = [{ x: bomb.x, y: bomb.y }];
-  for (const [dx, dy] of [
-    [1, 0],
-    [-1, 0],
-    [0, 1],
-    [0, -1],
-  ])
+  for (const d of DIRECTIONS)
     for (let n = 1; n <= bomb.range; n++) {
-      const x = bomb.x + (dx ?? 0) * n,
-        y = bomb.y + (dy ?? 0) * n,
+      const x = bomb.x + d.x * n,
+        y = bomb.y + d.y * n,
         tile = blockers[index(x, y)] ?? 1;
       if (tile === 1) break;
       cells.push({ x, y });
@@ -88,14 +100,75 @@ function detonate(state: BomberState, bomb: Bomb, blockers: readonly number[]) {
           state.map.tiles[index(x, y)] = 0;
           const owner = state.players.find((p) => p.id === bomb.owner);
           if (owner) owner.score += 50;
+          const hidden = state.map.hiddenItems.find(
+            (item) => item.x === x && item.y === y,
+          );
+          if (hidden)
+            state.map.items.push({
+              ...hidden,
+              bornAt: state.tick,
+              availableAt: state.tick + 10,
+            });
+          state.map.hiddenItems = state.map.hiddenItems.filter(
+            (item) => item.x !== x || item.y !== y,
+          );
         }
         break;
       }
     }
   for (const cell of cells) {
-    state.flames.push({ ...cell, until: state.tick + 10 });
+    const existing = state.flames.find((f) => sameCell(f, cell));
+    if (existing) existing.until = state.tick + 10;
+    else state.flames.push({ ...cell, until: state.tick + 10 });
+    state.map.items = state.map.items.filter(
+      (item) => item.bornAt === state.tick || !sameCell(item, cell),
+    );
     const chain = state.bombs.find((b) => sameCell(b, cell));
     if (chain) detonate(state, chain, blockers);
+  }
+}
+export function stepEnemies(state: BomberState): void {
+  const enemies = state.map.enemies;
+  const speed = 0.045 + state.map.stage * 0.006;
+  // 매 틱 우선순위를 순환해 좁은 통로에서 특정 적만 먼저 움직이지 않게 한다.
+  for (let i = 0; i < enemies.length; i++) {
+    const enemy = enemies[(i + state.tick) % enemies.length];
+    if (!enemy || enemy.waitUntil > state.tick) continue;
+    const space = {
+      map: state.map,
+      obstacles: state.bombs,
+      actors: enemies.filter((e) => e !== enemy),
+    };
+    if (
+      Math.abs(enemy.x - enemy.target.x) + Math.abs(enemy.y - enemy.target.y) <
+      0.001
+    ) {
+      const cell = gridCell(enemy);
+      const choices = DIRECTIONS.map((d) => ({
+        x: cell.x + d.x,
+        y: cell.y + d.y,
+      })).filter(
+        (p) =>
+          canOccupy(p, space) && !state.flames.some((f) => touchesCell(p, f)),
+      );
+      const rng = random(
+        hashSeed(String(state.map.seed) + ':' + state.tick + ':' + enemy.id),
+      );
+      const target = choices[Math.floor(rng() * choices.length)];
+      if (!target) {
+        enemy.waitUntil = state.tick + 3;
+        continue;
+      }
+      enemy.target = target;
+    }
+    const dx = enemy.target.x - enemy.x,
+      dy = enemy.target.y - enemy.y;
+    const distance = Math.max(Math.abs(dx), Math.abs(dy));
+    const moved = moveBody(enemy, dx, dy, Math.min(speed, distance), space);
+    if (!moved) {
+      enemy.target = gridCell(enemy);
+      enemy.waitUntil = state.tick + 3;
+    }
   }
 }
 export function stepBomber(
@@ -108,44 +181,51 @@ export function stepBomber(
   for (const p of state.players) {
     if (!p.alive) continue;
     const input = inputs[p.id] ?? { dx: 0, dy: 0, action: false };
-    if (p.cooldown > 0) p.cooldown--;
-    if (p.cooldown === 0 && (input.dx !== 0 || input.dy !== 0)) {
-      const dx = Math.sign(input.dx),
-        dy = dx ? 0 : Math.sign(input.dy),
-        x = p.x + dx,
-        y = p.y + dy;
-      if (
-        tileAt(state.map, x, y) === 0 &&
-        !state.bombs.some(
-          (b) => b.x === x && b.y === y && !b.pass.includes(p.id),
-        )
-      ) {
-        p.x = x;
-        p.y = y;
-        p.cooldown = 3;
-      }
-    }
-    for (const b of state.bombs)
-      if (!sameCell(p, b)) b.pass = b.pass.filter((id) => id !== p.id);
+    moveBody(p, input.dx, input.dy, p.speed, {
+      map: state.map,
+      obstacles: state.bombs.filter((b) => !b.pass.includes(p.id)),
+    });
+    for (const bomb of state.bombs)
+      if (!touchesCell(p, bomb))
+        bomb.pass = bomb.pass.filter((id) => id !== p.id);
+    const cell = gridCell(p);
     if (
       input.action &&
       !p.placed &&
-      state.bombs.filter((b) => b.owner === p.id).length < 2 &&
-      !state.bombs.some((b) => sameCell(b, p))
-    )
+      state.bombs.filter((b) => b.owner === p.id).length < p.capacity &&
+      !state.bombs.some((b) => sameCell(b, cell)) &&
+      tileAt(state.map, cell.x, cell.y) === 0
+    ) {
       state.bombs.push({
-        x: p.x,
-        y: p.y,
+        ...cell,
         owner: p.id,
         fuse: 36,
         range: p.range,
-        pass: state.players.filter((q) => sameCell(q, p)).map((q) => q.id),
+        pass: state.players
+          .filter((q) => touchesCell(q, cell))
+          .map((q) => q.id),
       });
+    }
     p.placed = input.action;
-    if (state.map.items.some((item) => sameCell(item, p))) {
-      state.map.items = state.map.items.filter((item) => !sameCell(item, p));
-      p.range = 3;
-      p.score += 100;
+    for (const item of [...state.map.items]) {
+      if (
+        Math.abs(item.x - p.x) < 0.45 &&
+        Math.abs(item.y - p.y) < 0.45 &&
+        item.availableAt <= state.tick &&
+        !state.flames.some((f) => sameCell(f, item))
+      ) {
+        state.map.items = state.map.items.filter((i) => i !== item);
+        if (item.kind === 'capacity') p.capacity = Math.min(5, p.capacity + 1);
+        if (item.kind === 'range') p.range = Math.min(6, p.range + 1);
+        if (item.kind === 'speed')
+          p.speed = Math.min(
+            MAX_SPEED,
+            Math.round((p.speed + 0.025) * 1000) / 1000,
+          );
+        p.score += 100;
+        p.pickup = item.kind;
+        p.pickupAt = state.tick;
+      }
     }
   }
   const blockers = [...state.map.tiles];
@@ -154,35 +234,31 @@ export function stepBomber(
     if (bomb.fuse <= 0 && state.bombs.includes(bomb))
       detonate(state, bomb, blockers);
   }
-  // 적의 순찰은 시드와 틱으로만 결정되며 화면 프레임률과 분리된다.
-  if (state.tick % Math.max(5, 14 - state.map.stage * 2) === 0) {
-    const rng = random(state.map.seed + state.tick);
-    for (const enemy of state.map.enemies) {
-      const choices = [
-        { x: enemy.x - 1, y: enemy.y },
-        { x: enemy.x + 1, y: enemy.y },
-      ].filter((c) => tileAt(state.map, c.x, c.y) === 0);
-      const next = choices[Math.floor(rng() * choices.length)];
-      if (next) Object.assign(enemy, next);
-    }
-  }
   state.map.enemies = state.map.enemies.filter(
-    (e) => !state.flames.some((f) => sameCell(f, e)),
+    (e) => !state.flames.some((f) => touchesCell(e, f)),
+  );
+  stepEnemies(state);
+  state.map.enemies = state.map.enemies.filter(
+    (e) => !state.flames.some((f) => touchesCell(e, f)),
   );
   const hazardOn = state.tick % 80 >= 60;
   for (const p of state.players)
     if (
       p.alive &&
-      (state.flames.some((f) => sameCell(f, p)) ||
-        state.map.enemies.some((e) => sameCell(e, p)) ||
-        (hazardOn && state.map.hazards.some((h) => sameCell(h, p))))
+      (state.flames.some((f) => touchesCell(p, f)) ||
+        state.map.enemies.some((e) => bodiesOverlap(e, p)) ||
+        (hazardOn && state.map.hazards.some((h) => touchesCell(p, h))))
     )
       p.alive = false;
   const alive = state.players.filter((p) => p.alive);
   if (state.mode === 'single') {
     const p = alive[0];
     if (!p) state.status = 'lost';
-    else if (sameCell(p, state.map.exit)) {
+    else if (
+      Math.abs(p.x - state.map.exit.x) < 0.35 &&
+      Math.abs(p.y - state.map.exit.y) < 0.35 &&
+      tileAt(state.map, state.map.exit.x, state.map.exit.y) === 0
+    ) {
       state.status = 'won';
       state.winners = [p.id];
       p.score += 1000 + Math.max(0, BOMBER_LIMIT - state.tick);

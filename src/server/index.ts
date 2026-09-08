@@ -1,6 +1,8 @@
 import { isGame, type Progress } from '../shared/contracts';
+import { rulesForGame } from '../shared/game-rules';
 import type { Env } from './env';
 import { body, checkOrigin, HttpError, json } from './http';
+import { PROGRESS_QUERY } from './progress';
 import { history, leaderboard } from './rankings';
 import { limitSubmission, sessionSubject } from './rate-limit';
 import { roomRequest } from './rooms/router';
@@ -32,10 +34,8 @@ export default {
         const player = await getPlayer(request, env);
         const progress = player
           ? (
-              await env.DB.prepare(
-                'SELECT game, completed_stage, best_score FROM progress WHERE player_id = ?',
-              )
-                .bind(player.id)
+              await env.DB.prepare(PROGRESS_QUERY)
+                .bind(rulesForGame('bomber'), player.id)
                 .all<Progress>()
             ).results
           : [];
@@ -48,10 +48,8 @@ export default {
           return json({
             player: existing,
             progress: (
-              await env.DB.prepare(
-                'SELECT game, completed_stage, best_score FROM progress WHERE player_id = ?',
-              )
-                .bind(existing.id)
+              await env.DB.prepare(PROGRESS_QUERY)
+                .bind(rulesForGame('bomber'), existing.id)
                 .all<Progress>()
             ).results,
           });

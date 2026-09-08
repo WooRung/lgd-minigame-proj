@@ -1,9 +1,11 @@
 import { expect, test } from '@playwright/test';
 import { type Leaderboard, readLeaderboard } from '../../src/shared/rankings';
+import { clearBomber } from './bomber-controls';
 
 test('일간 실제 완주 결과가 랭킹·내 순위·최근 기록에 표시된다', async ({
   page,
 }) => {
+  test.setTimeout(180000);
   await page.goto('/');
   await page.getByLabel('플레이어 이름').fill('오늘의 도전자');
   await page.getByRole('button', { name: '오락실 입장' }).click();
@@ -14,22 +16,7 @@ test('일간 실제 완주 결과가 랭킹·내 순위·최근 기록에 표시
   await page.getByRole('button', { name: '이 조건으로 도전' }).click();
   await page.getByRole('button', { name: '3단계 시작' }).click();
   await expect(page.getByTestId('time-left')).not.toHaveText('90초');
-  const move = async (key: string, position: string) => {
-    await page.keyboard.down(key);
-    await page.waitForFunction(
-      (p) =>
-        document.querySelector('[data-testid=player-position]')?.textContent ===
-        p,
-      position,
-    );
-    await page.keyboard.up(key);
-  };
-  await move('ArrowDown', '위치 2, 8');
-  await move('ArrowRight', '위치 8, 8');
-  await page.keyboard.press('Space', { delay: 80 });
-  await move('ArrowLeft', '위치 5, 8');
-  await page.waitForTimeout(2100);
-  await move('ArrowRight', '위치 10, 8');
+  await clearBomber(page);
   await expect(page.getByText(/기록 저장 완료/)).toBeVisible();
   await page.getByRole('button', { name: '기록으로', exact: true }).click();
   await expect(page.getByTestId('my-rank')).toBeVisible();
@@ -65,14 +52,14 @@ test('공동 순위·최고 기록 유지·중복·게임과 기간 분리', asy
   }
   expect(new Set(runs.map((r) => r.seed)).size).toBe(1);
   // 순위 경계만 확인하는 로컬 API fixture. 실제 키 입력 완주는 별도 시나리오에서 검증한다.
-  await new Promise((resolve) => setTimeout(resolve, 3100));
+  await new Promise((resolve) => setTimeout(resolve, 5100));
   for (let i = 0; i < contexts.length; i++) {
     const c = contexts[i],
       r = runs[i];
     if (!c || !r) throw Error();
     const result = await c.request.post(`${origin}/api/runs/${r.id}/finish`, {
       headers: { Origin: origin },
-      data: { ticks: 60, score: i === 2 ? 2740 : 2790, won: true },
+      data: { ticks: 100, score: i === 2 ? 2700 : 2750, won: true },
     });
     expect(result.status()).toBe(200);
   }
@@ -103,7 +90,7 @@ test('공동 순위·최고 기록 유지·중복·게임과 기간 분리', asy
     (
       await a.request.post(`${origin}/api/runs/${r.id}/finish`, {
         headers: { Origin: origin },
-        data: { ticks: 60, score: 2790, won: true },
+        data: { ticks: 100, score: 2750, won: true },
       })
     ).status(),
   ).toBe(409);
@@ -113,19 +100,19 @@ test('공동 순위·최고 기록 유지·중복·게임과 기간 분리', asy
       data: { game: 'bomber', mode: 'daily' },
     })
   ).json();
-  await new Promise((resolve) => setTimeout(resolve, 3100));
+  await new Promise((resolve) => setTimeout(resolve, 5100));
   expect(
     (
       await a.request.post(`${origin}/api/runs/${lower.id}/finish`, {
         headers: { Origin: origin },
-        data: { ticks: 60, score: 2740, won: true },
+        data: { ticks: 100, score: 2700, won: true },
       })
     ).status(),
   ).toBe(200);
   const after = await (
     await a.request.get(`${origin}/api/rankings?game=bomber&mode=daily`)
   ).json();
-  expect(after.mine.score).toBe(2790);
+  expect(after.mine.score).toBe(2750);
   expect(
     (
       await (

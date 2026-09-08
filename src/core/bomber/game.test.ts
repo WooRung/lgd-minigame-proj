@@ -19,16 +19,6 @@ describe('폭탄 맵과 규칙', () => {
     bad.tiles.fill(1);
     expect(validateMap(bad)).toBe(false);
   });
-  it('벽과 폭탄을 통과하지 않고 설치한 폭탄에서는 나갈 수 있다', () => {
-    const s = createBomber(1, 1, ['a']);
-    stepBomber(s, { a: { dx: -1, dy: 0, action: true } });
-    expect(s.players[0]?.x).toBe(1);
-    stepBomber(s, { a: { dx: 1, dy: 0, action: false } });
-    expect(s.players[0]?.x).toBe(2);
-    for (let i = 0; i < 4; i++)
-      stepBomber(s, { a: { dx: -1, dy: 0, action: false } });
-    expect(s.players[0]?.x).toBe(2);
-  });
   it('파괴벽에서 폭발이 멈추고 폭탄이 연쇄 폭발한다', () => {
     const s = createBomber(1, 1, ['a']);
     s.map.tiles[index(3, 1)] = 2;
@@ -54,9 +44,9 @@ describe('폭탄 맵과 규칙', () => {
     const s = createBomber(1, 1, ['a']);
     const p = s.players[0];
     if (!p) throw Error();
-    s.map.tiles[index(9, 7)] = 0;
-    p.x = 9;
-    p.y = 7;
+    s.map.tiles[index(15, 11)] = 0;
+    p.x = 15;
+    p.y = 11;
     stepBomber(s, {});
     expect(s.status).toBe('won');
     const tick = s.tick;

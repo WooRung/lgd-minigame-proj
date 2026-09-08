@@ -7,6 +7,7 @@ import {
 } from '@playwright/test';
 import { isObject } from '../../src/shared/contracts';
 import { type RoomView, readRoom } from '../../src/shared/room';
+import { moveBomber } from './bomber-controls';
 
 interface Guest {
   context: BrowserContext;
@@ -61,7 +62,9 @@ async function reconnect(g: Guest, code: string) {
   watch(page, g.frames);
   await page.goto(`/?room=${code}`);
   await page.getByRole('button', { name: '참가하기', exact: true }).click();
-  await expect(page.getByTestId('connection-status')).toHaveText('연결됨');
+  await expect(page.getByTestId('connection-status')).toHaveText('연결됨', {
+    timeout: 12000,
+  });
   await expect(page.locator('.game-canvas')).toHaveAttribute(
     'data-ready',
     'true',
@@ -106,18 +109,70 @@ for (const count of [2, 4])
           (r) => r.startedAt === initial?.startedAt && r.seed === initial.seed,
         ),
       ).toBe(true);
-    await host.page.keyboard.down('ArrowDown');
-    await host.page.waitForFunction(
-      () =>
-        document.querySelector('[data-testid=my-position]')?.textContent ===
-        '내 위치 2, 3',
+    const hud = host.page.getByTestId('bomber-status');
+    expect(JSON.parse((await hud.getAttribute('data-items')) ?? '[]')).toEqual(
+      [],
     );
-    await host.page.keyboard.up('ArrowDown');
+    await host.page.keyboard.press('Space', { delay: 100 });
+    await moveBomber(host.page, 'y', 4);
+    await expect
+      .poll(
+        async () =>
+          JSON.parse((await hud.getAttribute('data-items')) ?? '[]').length,
+      )
+      .toBeGreaterThan(0);
+    await host.page.waitForTimeout(650);
+    await moveBomber(host.page, 'y', 1);
+    await host.page.waitForTimeout(200);
+    await moveBomber(host.page, 'x', 3);
+    await expect
+      .poll(
+        async () =>
+          Number(await hud.getAttribute('data-capacity')) > 2 ||
+          Number(await hud.getAttribute('data-range')) > 2 ||
+          Number(await hud.getAttribute('data-speed')) > 0.16,
+      )
+      .toBe(true);
+    for (const g of guests) {
+      expect(
+        g.frames.some(
+          (r) =>
+            r.state?.kind === 'bomber' &&
+            r.state.map.tiles.length === 221 &&
+            r.state.map.enemies.length === 0,
+        ),
+      ).toBe(true);
+      expect(
+        g.frames.some(
+          (r) =>
+            r.state?.kind === 'bomber' &&
+            r.state.players.some((p) => !Number.isInteger(p.y)),
+        ),
+      ).toBe(true);
+      expect(
+        g.frames.some(
+          (r) =>
+            r.state?.kind === 'bomber' &&
+            r.state.players.some((p) => p.pickup !== null),
+        ),
+      ).toBe(true);
+    }
     const second = guests[1];
     if (!second) throw Error();
     await reconnect(second, code);
     await expect(second.page.getByTestId('room-phase')).toHaveText('경기 중');
-    for (const g of guests.slice(1))
+    if (count === 4) {
+      await second.page.keyboard.press('Space', { delay: 120 });
+      await expect(
+        second.page.getByText('탈락했습니다. 관전 중입니다.'),
+      ).toBeVisible();
+      await expect(second.page.getByTestId('room-phase')).toHaveText('경기 중');
+      await reconnect(second, code);
+      await expect(
+        second.page.getByText('탈락했습니다. 관전 중입니다.'),
+      ).toBeVisible();
+    }
+    for (const g of guests.slice(count === 4 ? 2 : 1))
       await g.page.keyboard.press('Space', { delay: 120 });
     for (const g of guests) {
       await expect(

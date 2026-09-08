@@ -1,5 +1,6 @@
 import { BOMBER_LIMIT } from '../core/bomber/game';
 import { generateMap } from '../core/bomber/map';
+import { MAX_SPEED } from '../core/bomber/motion';
 import { TICK_MS } from '../core/random';
 import { runnerDistanceAtTick } from '../core/runner/physics';
 import { generateSegment, SEGMENT_LENGTH } from '../core/runner/segments';
@@ -8,6 +9,7 @@ import { rulesForGame } from '../shared/game-rules';
 import { isRunMode, type Run } from '../shared/runs';
 import type { Env } from './env';
 import { body, HttpError, json } from './http';
+import { BOMBER_PROGRESS_UPSERT } from './progress';
 import { BEST_UPSERT, challenge, RUNNER_BEST_UPSERT } from './rankings';
 export interface StoredRun {
   id: string;
@@ -90,19 +92,33 @@ export function validateResult(
     throw new HttpError(409, '이미 저장된 도전입니다.');
   if (now - run.issued_at > 2 * 60 * 60 * 1000)
     throw new HttpError(410, '도전이 만료되었습니다. 새 도전을 시작해 주세요.');
-  if (ticks * TICK_MS > now - run.issued_at + 1200 || (won && ticks < 60))
+  if (ticks * TICK_MS > now - run.issued_at + 1200)
     throw new HttpError(400, '플레이 시간과 결과가 일치하지 않습니다.');
   if (won && run.game === 'bomber' && score < 1000)
     throw new HttpError(400, '완료 점수가 올바르지 않습니다.');
   if (run.game === 'bomber') {
     const map = generateMap(run.seed, run.stage);
+    const spawn = map.spawns[0];
+    if (
+      won &&
+      spawn &&
+      ticks <
+        Math.ceil(
+          (Math.abs(map.exit.x - spawn.x) +
+            Math.abs(map.exit.y - spawn.y) -
+            0.7) /
+            MAX_SPEED,
+        )
+    )
+      throw new HttpError(400, '출구까지 이동할 수 없는 완료 시간입니다.');
     const base = won ? 1000 + BOMBER_LIMIT - ticks : 0;
     const bonus = score - base;
     if (
       bonus < 0 ||
       bonus % 50 !== 0 ||
       bonus >
-        map.tiles.filter((t) => t === 2).length * 50 + map.items.length * 100
+        map.tiles.filter((t) => t === 2).length * 50 +
+          map.hiddenItems.length * 100
     )
       throw new HttpError(400, '이 맵에서 가능한 점수가 아닙니다.');
   }
@@ -217,11 +233,7 @@ export async function finishRun(
     ),
   ];
   if (result.won && run.mode === 'normal')
-    statements.push(
-      env.DB.prepare(
-        'INSERT INTO progress(player_id,game,completed_stage,best_score) SELECT player_id,game,stage,score FROM runs WHERE id=? AND player_id=? AND won=1 ON CONFLICT(player_id,game) DO UPDATE SET completed_stage=MAX(completed_stage,excluded.completed_stage), best_score=MAX(best_score,excluded.best_score)',
-      ).bind(id, player.id),
-    );
+    statements.push(env.DB.prepare(BOMBER_PROGRESS_UPSERT).bind(id, player.id));
   if (run.game === 'runner')
     statements.push(env.DB.prepare(RUNNER_BEST_UPSERT).bind(id, player.id));
   if (result.won && run.mode !== 'normal')

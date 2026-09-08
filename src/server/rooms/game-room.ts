@@ -61,6 +61,11 @@ export class GameRoom extends DurableObject<Env> {
         this.room.state.course.rulesVersion !== rulesForGame('runner')
       )
         this.room.state = null;
+      if (
+        this.room?.state?.kind === 'bomber' &&
+        this.room.state.map.rulesVersion !== rulesForGame('bomber')
+      )
+        this.room.state = null;
       this.expiresAt = (await ctx.storage.get<number>('expiresAt')) ?? 0;
       if (
         this.room &&
