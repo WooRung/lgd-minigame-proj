@@ -14,6 +14,7 @@ import {
   RUNNER_START_SPEED,
   type RunnerTerrain,
   runnerBody,
+  runnerDistanceAtTick,
   runnerHeight,
   runnerSpeed,
 } from './physics';
@@ -216,6 +217,7 @@ describe('무한 싱글·서버 공용 멀티 판정과 자원 상한', () => {
       if (!player.alive)
         throw Error(`장시간 주행 실패 tick=${tick} x=${player.x}`);
       if (tick % 1000 === 0) {
+        expect(player.distance).toBe(runnerDistanceAtTick(state.tick));
         maxSegments = Math.max(maxSegments, state.course.segments.length);
         maxIds = Math.max(maxIds, player.collected.length);
         maxBytes = Math.max(maxBytes, JSON.stringify(state).length);

@@ -1,14 +1,16 @@
 import { type GameKind, isGame, isObject } from './contracts';
+import { isRunMode, type RunMode } from './runs';
 export interface RankedRecord {
   playerId: string;
   name: string;
   score: number;
   ticks: number;
   rank: number;
+  distance: number | null;
 }
 export interface Leaderboard {
   game: GameKind;
-  mode: 'daily' | 'weekly';
+  mode: RunMode;
   period: string;
   seed: number;
   rulesVersion: string;
@@ -22,7 +24,7 @@ export function readLeaderboard(v: unknown): Leaderboard {
   if (
     !isObject(v) ||
     !isGame(v.game) ||
-    (v.mode !== 'daily' && v.mode !== 'weekly') ||
+    !isRunMode(v.mode) ||
     typeof v.period !== 'string' ||
     typeof v.seed !== 'number' ||
     typeof v.rulesVersion !== 'string' ||
@@ -39,7 +41,11 @@ export function readLeaderboard(v: unknown): Leaderboard {
       typeof r.name !== 'string' ||
       typeof r.score !== 'number' ||
       typeof r.ticks !== 'number' ||
-      typeof r.rank !== 'number'
+      typeof r.rank !== 'number' ||
+      !(
+        r.distance === null ||
+        (typeof r.distance === 'number' && Number.isSafeInteger(r.distance))
+      )
     )
       throw Error('기록 형식 오류');
     return {
@@ -48,6 +54,7 @@ export function readLeaderboard(v: unknown): Leaderboard {
       score: r.score,
       ticks: r.ticks,
       rank: r.rank,
+      distance: r.distance,
     };
   }
   return {
@@ -72,6 +79,8 @@ export interface HistoryRow {
   outcome: string;
   endedAt: number;
   rank: number | null;
+  distance: number | null;
+  rulesVersion: string;
 }
 export function readHistory(value: unknown): HistoryRow[] {
   if (!Array.isArray(value)) throw Error('기록 응답 오류');
@@ -85,7 +94,12 @@ export function readHistory(value: unknown): HistoryRow[] {
       !(v.ticks === null || typeof v.ticks === 'number') ||
       typeof v.outcome !== 'string' ||
       typeof v.endedAt !== 'number' ||
-      !(v.rank === null || typeof v.rank === 'number')
+      !(v.rank === null || typeof v.rank === 'number') ||
+      !(
+        v.distance === null ||
+        (typeof v.distance === 'number' && Number.isSafeInteger(v.distance))
+      ) ||
+      typeof v.rulesVersion !== 'string'
     )
       throw Error('기록 응답 오류');
     return {
@@ -97,6 +111,8 @@ export function readHistory(value: unknown): HistoryRow[] {
       outcome: v.outcome,
       endedAt: v.endedAt,
       rank: v.rank,
+      distance: v.distance,
+      rulesVersion: v.rulesVersion,
     };
   });
 }

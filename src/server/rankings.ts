@@ -1,47 +1,56 @@
-import { hashSeed, RULES_VERSION } from '../core/random';
+import { hashSeed } from '../core/random';
 import type { GameKind } from '../shared/contracts';
+import { rulesForGame } from '../shared/game-rules';
 import type { HistoryRow, Leaderboard, RankedRecord } from '../shared/rankings';
+import type { RunMode } from '../shared/runs';
 import type { Env } from './env';
-export function challenge(
-  game: GameKind,
-  mode: 'daily' | 'weekly',
-  now: number,
-) {
+export function challenge(game: GameKind, mode: RunMode, now: number) {
   const korean = new Date(now + 9 * 60 * 60 * 1000);
   if (mode === 'weekly')
     korean.setUTCDate(korean.getUTCDate() - ((korean.getUTCDay() + 6) % 7));
-  const period = korean.toISOString().slice(0, 10),
-    stage = 3;
+  const period = mode === 'normal' ? '' : korean.toISOString().slice(0, 10),
+    stage = game === 'runner' ? 1 : 3;
+  const version = rulesForGame(game);
   return {
     period,
     stage,
-    seed: hashSeed(`${game}:${mode}:${RULES_VERSION}:${period}:${stage}`),
-    rulesVersion: RULES_VERSION,
+    seed:
+      mode === 'normal'
+        ? 0
+        : hashSeed(`${game}:${mode}:${version}:${period}:${stage}`),
+    rulesVersion: version,
   };
 }
 export function rankOrder(game: GameKind) {
-  return game === 'bomber' ? 'score DESC, ticks ASC' : 'ticks ASC, score DESC';
+  return game === 'bomber'
+    ? 'score DESC, ticks ASC'
+    : 'distance DESC, score DESC';
 }
 export const BEST_UPSERT = `INSERT INTO challenge_bests(player_id,game,mode,rules_version,period,seed,score,ticks,run_id)
  SELECT player_id,game,mode,rules_version,period,seed,score,ticks,id FROM runs WHERE id=? AND player_id=? AND won=1
  ON CONFLICT(player_id,game,mode,rules_version,period,seed) DO UPDATE SET score=excluded.score,ticks=excluded.ticks,run_id=excluded.run_id
  WHERE (excluded.game='bomber' AND (excluded.score>challenge_bests.score OR (excluded.score=challenge_bests.score AND excluded.ticks<challenge_bests.ticks)))
  OR (excluded.game='runner' AND (excluded.ticks<challenge_bests.ticks OR (excluded.ticks=challenge_bests.ticks AND excluded.score>challenge_bests.score)))`;
+export const RUNNER_BEST_UPSERT = `INSERT INTO runner_bests(player_id,mode,rules_version,period,seed,distance,score,ticks,run_id)
+ SELECT player_id,mode,rules_version,period,seed,distance,score,ticks,id FROM runs WHERE id=? AND player_id=? AND game='runner' AND finished_at IS NOT NULL AND distance IS NOT NULL
+ ON CONFLICT(player_id,mode,rules_version,period) DO UPDATE SET seed=excluded.seed,distance=excluded.distance,score=excluded.score,ticks=excluded.ticks,run_id=excluded.run_id
+ WHERE excluded.distance>runner_bests.distance OR (excluded.distance=runner_bests.distance AND excluded.score>runner_bests.score)`;
 export async function leaderboard(
   env: Env,
   game: GameKind,
-  mode: 'daily' | 'weekly',
+  mode: RunMode,
   playerId: string | null,
 ): Promise<Leaderboard> {
   const condition = challenge(game, mode, Date.now());
-  const params = [
-    game,
-    mode,
-    condition.rulesVersion,
-    condition.period,
-    condition.seed,
-  ];
-  const cte = `WITH ranked AS (SELECT b.player_id AS playerId,p.name,b.score,b.ticks,RANK() OVER(ORDER BY ${rankOrder(game)}) AS rank FROM challenge_bests b JOIN players p ON p.id=b.player_id WHERE game=? AND mode=? AND rules_version=? AND period=? AND seed=?)`;
+  const params =
+    game === 'runner'
+      ? [mode, condition.rulesVersion, condition.period]
+      : [game, mode, condition.rulesVersion, condition.period, condition.seed];
+  const source =
+    game === 'runner'
+      ? 'runner_bests b JOIN players p ON p.id=b.player_id WHERE mode=? AND rules_version=? AND period=?'
+      : 'challenge_bests b JOIN players p ON p.id=b.player_id WHERE game=? AND mode=? AND rules_version=? AND period=? AND seed=?';
+  const cte = `WITH ranked AS (SELECT b.player_id AS playerId,p.name,b.score,b.ticks,${game === 'runner' ? 'b.distance' : 'NULL'} AS distance,RANK() OVER(ORDER BY ${rankOrder(game)}) AS rank FROM ${source})`;
   const top = (
     await env.DB.prepare(
       `${cte} SELECT * FROM ranked ORDER BY rank,playerId LIMIT 10`,
@@ -63,9 +72,7 @@ export async function leaderboard(
           .all<RankedRecord>()
       ).results
     : [];
-  const total = await env.DB.prepare(
-    'SELECT COUNT(*) AS count FROM challenge_bests WHERE game=? AND mode=? AND rules_version=? AND period=? AND seed=?',
-  )
+  const total = await env.DB.prepare(`SELECT COUNT(*) AS count FROM ${source}`)
     .bind(...params)
     .first<{ count: number }>();
   return {
@@ -85,7 +92,7 @@ export async function history(
 ): Promise<HistoryRow[]> {
   return (
     await env.DB.prepare(
-      `SELECT id,mode,stage,score,ticks,CASE won WHEN 1 THEN '완료' ELSE '실패' END AS outcome,finished_at AS endedAt,NULL AS rank FROM runs WHERE player_id=? AND game=? AND finished_at IS NOT NULL UNION ALL SELECT m.id,'friendly' AS mode,NULL AS stage,r.score,NULL AS ticks,r.outcome,m.ended_at AS endedAt,r.rank FROM match_results r JOIN matches m ON m.id=r.match_id WHERE r.player_id=? AND m.game=? ORDER BY endedAt DESC LIMIT 20`,
+      `SELECT id,mode,stage,score,ticks,distance,rules_version AS rulesVersion,CASE WHEN ended_reason='manual' THEN '종료' WHEN won=1 THEN '완료' ELSE '실패' END AS outcome,finished_at AS endedAt,NULL AS rank FROM runs WHERE player_id=? AND game=? AND finished_at IS NOT NULL UNION ALL SELECT m.id,'friendly' AS mode,NULL AS stage,r.score,NULL AS ticks,r.distance,m.rules_version AS rulesVersion,r.outcome,m.ended_at AS endedAt,r.rank FROM match_results r JOIN matches m ON m.id=r.match_id WHERE r.player_id=? AND m.game=? ORDER BY endedAt DESC LIMIT 20`,
     )
       .bind(playerId, game, playerId, game)
       .all<HistoryRow>()

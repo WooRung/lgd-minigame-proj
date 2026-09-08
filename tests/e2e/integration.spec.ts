@@ -77,7 +77,7 @@ test('저장 응답 유실 복구·두 게임 화면 이탈·작은 화면', asy
     .locator('.runner')
     .getByRole('button', { name: '싱글 플레이', exact: true })
     .click();
-  await page.getByRole('button', { name: '1단계 시작' }).click();
+  await page.getByRole('button', { name: '무한 달리기 시작' }).click();
   await expect(page.locator('.game-canvas')).toHaveAttribute(
     'data-ready',
     'true',

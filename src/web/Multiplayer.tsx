@@ -308,14 +308,10 @@ export function Multiplayer({
                       ? room.phase === 'ended'
                         ? '경기 종료'
                         : live
-                          ? room.state?.kind === 'runner' &&
-                            room.state.players.find((p) => p.id === m.id)
-                              ?.finishedAt !== null
-                            ? '완주 · 관전'
-                            : room.state?.players.find((p) => p.id === m.id)
-                                  ?.alive
-                              ? '생존'
-                              : '탈락 · 관전'
+                          ? room.state?.players.find((p) => p.id === m.id)
+                              ?.alive
+                            ? '생존'
+                            : '탈락 · 관전'
                           : m.ready
                             ? '준비 완료'
                             : '준비 대기'
@@ -325,7 +321,8 @@ export function Multiplayer({
               ))}
           </div>
           <p className="muted" data-testid="room-seed">
-            공통 맵 {room.seed} · 최대 4인 · 90초
+            공통 맵 {room.seed} · 최대 4인 · {room.game === 'runner' ? 180 : 90}
+            초
           </p>
           {room.phase === 'waiting' && (
             <section className="panel stack">
@@ -364,11 +361,11 @@ export function Multiplayer({
               <p>
                 {room.game === 'bomber'
                   ? '방향키 이동 · Space 폭탄. 마지막 생존자가 승리합니다.'
-                  : '자동 달리기 · Space 점프 · 갈림길 ↑↓ 선택. 완주 시간으로 순위를 결정합니다.'}
+                  : '자동 달리기 · Space / ↑ 점프 · ↓ 누르기 슬라이드. 마지막 생존자가 승리합니다.'}
                 <br />
                 {room.game === 'bomber'
                   ? '동시 전멸 또는 90초 시간 초과는 무승부입니다.'
-                  : '미완주는 진행 거리순이며 같은 거리·같은 완주 시간은 공동 순위입니다.'}
+                  : '180초 종료 시 거리 우선, 수집 점수 다음입니다. 두 값이 같으면 공동 순위입니다.'}
               </p>
             </section>
           )}
@@ -376,7 +373,12 @@ export function Multiplayer({
             <>
               <div className="row">
                 <strong data-testid="multiplayer-time">
-                  {Math.max(0, 90 - Math.floor(room.state.tick / 20))}초
+                  {Math.max(
+                    0,
+                    (room.game === 'runner' ? 180 : 90) -
+                      Math.floor(room.state.tick / 20),
+                  )}
+                  초
                 </strong>
                 {room.state.kind === 'bomber' && (
                   <span data-testid="my-position">
@@ -404,11 +406,7 @@ export function Multiplayer({
                   <RunnerCanvas
                     state={room.state}
                     paused={
-                      room.phase !== 'playing' ||
-                      !alive ||
-                      status !== '연결됨' ||
-                      room.state.players.find((p) => p.id === player.id)
-                        ?.finishedAt !== null
+                      room.phase !== 'playing' || !alive || status !== '연결됨'
                     }
                     send={input}
                     playerId={player.id}
@@ -435,7 +433,11 @@ export function Multiplayer({
                         : r.outcome === 'draw'
                           ? '무승부'
                           : '중단'}{' '}
-                    · {r.score}점
+                    ·{' '}
+                    {r.distance !== null
+                      ? `${(r.distance / 10).toFixed(1)}m · 수집 `
+                      : ''}
+                    {r.score}점
                   </li>
                 ))}
               </ol>

@@ -179,7 +179,7 @@ export function App() {
                       <p>
                         {game === 'bomber'
                           ? '폭탄으로 길을 만들고, 마지막까지 살아남으세요.'
-                          : '바람을 타고, 끝까지 달려 보세요.'}
+                          : '점프와 슬라이드로 새로운 풍경 속을 끝없이 달려요.'}
                       </p>
                     </div>
                     <div className="game-actions">
@@ -226,7 +226,7 @@ export function App() {
                     ? profile.progress
                         .map(
                           (p) =>
-                            `${p.game === 'bomber' ? '팡팡 아레나' : '바람 러너'} ${p.completed_stage}/5단계 완료`,
+                            `${p.game === 'bomber' ? '팡팡 아레나' : '이전 바람 러너'} ${p.completed_stage}/5단계 완료`,
                         )
                         .join(' · ')
                     : '첫 모험을 기다리고 있어요.'}
@@ -243,7 +243,7 @@ export function App() {
           <b>팡팡 아레나</b> 방향키 이동 · Space 폭탄
         </span>
         <span>
-          <b>바람 러너</b> Space 점프 · 방향키 갈림길
+          <b>바람 러너</b> Space/↑ 점프 · ↓ 슬라이드
         </span>
         <small>좋은 게임이 틈새를 더 즐겁게 만듭니다.</small>
       </footer>

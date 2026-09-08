@@ -1,7 +1,10 @@
 import { useEffect, useRef } from 'react';
 import type { BomberInput } from '../core/bomber/game';
 import { TICK_MS } from '../core/random';
-import { type RunnerState, stepRunner } from '../core/runner/game';
+import {
+  type EndlessState as RunnerState,
+  stepEndlessRunner as stepRunner,
+} from '../core/runner/endless';
 export function RunnerCanvas({
   state,
   paused,

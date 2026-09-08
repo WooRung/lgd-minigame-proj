@@ -66,7 +66,12 @@ export default {
         const query = new URL(request.url).searchParams,
           game = query.get('game'),
           mode = query.get('mode');
-        if (!isGame(game) || (mode !== 'daily' && mode !== 'weekly'))
+        if (
+          !isGame(game) ||
+          (mode !== 'daily' &&
+            mode !== 'weekly' &&
+            !(game === 'runner' && mode === 'normal'))
+        )
           throw new HttpError(400, '게임과 기간을 확인해 주세요.');
         return json(
           await leaderboard(

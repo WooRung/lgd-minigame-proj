@@ -39,9 +39,7 @@ test('일간 실제 완주 결과가 랭킹·내 순위·최근 기록에 표시
   await expect(page.locator('.history-list')).toContainText('일간 도전');
   await page.screenshot({ path: '/tmp/arcade-rankings.png', fullPage: true });
   await page.getByLabel('도전 기간').selectOption('weekly');
-  await expect(
-    page.getByText('이 도전의 완료 기록이 아직 없어요.'),
-  ).toBeVisible();
+  await expect(page.getByText('이 도전의 기록이 아직 없어요.')).toBeVisible();
 });
 test('공동 순위·최고 기록 유지·중복·게임과 기간 분리', async ({ browser }) => {
   const origin = 'http://127.0.0.1:5173',

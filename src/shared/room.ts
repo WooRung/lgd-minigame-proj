@@ -1,7 +1,8 @@
 import type { BomberInput, BomberState } from '../core/bomber/game';
 import { HEIGHT, WIDTH } from '../core/bomber/map';
-import type { RunnerState } from '../core/runner/game';
+import type { EndlessState as RunnerState } from '../core/runner/endless';
 import { type GameKind, isGame, isObject } from './contracts';
+import { isEndlessState } from './runner-state';
 export const RECONNECT_MS = 15000;
 export const IDLE_MS = 15 * 60 * 1000;
 export interface Member {
@@ -18,10 +19,12 @@ export interface MatchResult {
   name: string;
   rank: number;
   score: number;
+  distance: number | null;
   outcome: 'win' | 'loss' | 'draw' | 'aborted';
 }
 export interface RoomView {
   code: string;
+  rulesVersion?: string;
   game: GameKind;
   hostId: string;
   members: Member[];
@@ -169,6 +172,7 @@ export function readRoom(v: unknown): RoomView {
   if (
     !isObject(v) ||
     typeof v.code !== 'string' ||
+    !(v.rulesVersion === undefined || typeof v.rulesVersion === 'string') ||
     !isGame(v.game) ||
     typeof v.hostId !== 'string' ||
     !['waiting', 'countdown', 'playing', 'ended', 'closed'].includes(
@@ -226,6 +230,11 @@ export function readRoom(v: unknown): RoomView {
       typeof r.name !== 'string' ||
       !integer(r.rank) ||
       !integer(r.score) ||
+      !(
+        r.distance === undefined ||
+        r.distance === null ||
+        integer(r.distance)
+      ) ||
       (r.outcome !== 'win' &&
         r.outcome !== 'loss' &&
         r.outcome !== 'draw' &&
@@ -237,13 +246,17 @@ export function readRoom(v: unknown): RoomView {
       name: r.name,
       rank: r.rank,
       score: r.score,
+      distance: r.distance ?? null,
       outcome: r.outcome,
     };
   });
-  if (v.state !== null && !isBomberState(v.state) && !isRunnerState(v.state))
+  if (v.state !== null && !isBomberState(v.state) && !isEndlessState(v.state))
     throw Error('경기 상태 오류');
   return {
     code: v.code,
+    ...(typeof v.rulesVersion === 'string'
+      ? { rulesVersion: v.rulesVersion }
+      : {}),
     game: v.game,
     hostId: v.hostId,
     members,
@@ -256,92 +269,4 @@ export function readRoom(v: unknown): RoomView {
     saved: v.saved,
     notice: v.notice,
   };
-}
-
-function isRunnerState(s: unknown): s is RunnerState {
-  if (
-    !isObject(s) ||
-    s.kind !== 'runner' ||
-    !isObject(s.course) ||
-    !integer(s.tick) ||
-    !['playing', 'won', 'lost', 'draw'].includes(String(s.status)) ||
-    !['single', 'multi'].includes(String(s.mode)) ||
-    !strings(s.winners)
-  )
-    return false;
-  const c = s.course;
-  if (
-    !integer(c.seed) ||
-    !integer(c.stage) ||
-    typeof c.generatorVersion !== 'string' ||
-    typeof c.rulesVersion !== 'string' ||
-    !finite(c.length) ||
-    !finite(c.speed) ||
-    typeof c.fallback !== 'boolean'
-  )
-    return false;
-  if (
-    !Array.isArray(c.obstacles) ||
-    c.obstacles.length > 100 ||
-    !c.obstacles.every(
-      (o) =>
-        isObject(o) &&
-        finite(o.x) &&
-        finite(o.width) &&
-        finite(o.height) &&
-        (o.lane === 0 || o.lane === 1) &&
-        (o.kind === 'hurdle' || o.kind === 'gap'),
-    )
-  )
-    return false;
-  if (
-    !Array.isArray(c.platforms) ||
-    !c.platforms.every(
-      (p) =>
-        isObject(p) &&
-        finite(p.x) &&
-        finite(p.width) &&
-        finite(p.phase) &&
-        (p.lane === 0 || p.lane === 1),
-    )
-  )
-    return false;
-  if (
-    !Array.isArray(c.coins) ||
-    !c.coins.every(
-      (p) =>
-        isObject(p) &&
-        integer(p.id) &&
-        finite(p.x) &&
-        finite(p.y) &&
-        (p.lane === 0 || p.lane === 1),
-    )
-  )
-    return false;
-  if (
-    !Array.isArray(c.forks) ||
-    !c.forks.every((p) => isObject(p) && finite(p.start) && finite(p.end))
-  )
-    return false;
-  return (
-    Array.isArray(s.players) &&
-    s.players.length <= 4 &&
-    s.players.every(
-      (p) =>
-        isObject(p) &&
-        typeof p.id === 'string' &&
-        finite(p.x) &&
-        finite(p.y) &&
-        finite(p.vy) &&
-        (p.lane === 0 || p.lane === 1) &&
-        typeof p.alive === 'boolean' &&
-        integer(p.score) &&
-        Array.isArray(p.collected) &&
-        p.collected.every(integer) &&
-        integer(p.boost) &&
-        (p.finishedAt === null || integer(p.finishedAt)) &&
-        typeof p.held === 'boolean' &&
-        typeof p.grounded === 'boolean',
-    )
-  );
 }

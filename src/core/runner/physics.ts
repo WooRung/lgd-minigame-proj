@@ -43,6 +43,21 @@ export function runnerSpeed(distance: number): number {
     RUNNER_START_SPEED + Math.floor(Math.max(0, distance) / 4800) * 0.375,
   );
 }
+// 결과 검증에서 플레이한 틱 수만큼 반복하지 않고 속도 경계 7개만 계산한다.
+export function runnerDistanceAtTick(ticks: number): number {
+  let remaining = ticks;
+  let x = 0;
+  for (let level = 0; level < 7 && remaining > 0; level++) {
+    const speed = RUNNER_START_SPEED + level * 0.375;
+    const count = Math.min(
+      remaining,
+      Math.ceil(((level + 1) * 4800 - x) / speed),
+    );
+    x += count * speed;
+    remaining -= count;
+  }
+  return Math.floor(x + remaining * RUNNER_MAX_SPEED);
+}
 export function runnerBody(x = 0): RunnerBody {
   return {
     x,

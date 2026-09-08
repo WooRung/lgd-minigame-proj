@@ -7,17 +7,26 @@ import {
   readHistory,
   readLeaderboard,
 } from '../shared/rankings';
+import type { RunMode } from '../shared/runs';
 import { api } from './api';
 
-function Table({ rows, myId }: { rows: RankedRecord[]; myId: string }) {
+function Table({
+  rows,
+  myId,
+  game,
+}: {
+  rows: RankedRecord[];
+  myId: string;
+  game: GameKind;
+}) {
   return (
     <table>
       <thead>
         <tr>
           <th>순위</th>
           <th>플레이어</th>
-          <th>점수</th>
-          <th>완주 시간</th>
+          <th>{game === 'runner' ? '거리' : '점수'}</th>
+          <th>{game === 'runner' ? '수집 점수' : '완주 시간'}</th>
         </tr>
       </thead>
       <tbody>
@@ -28,8 +37,16 @@ function Table({ rows, myId }: { rows: RankedRecord[]; myId: string }) {
               {r.name}
               {r.playerId === myId ? ' (나)' : ''}
             </td>
-            <td>{r.score.toLocaleString()}</td>
-            <td>{(r.ticks / 20).toFixed(2)}초</td>
+            <td>
+              {game === 'runner'
+                ? `${((r.distance ?? 0) / 10).toFixed(1)}m`
+                : r.score.toLocaleString()}
+            </td>
+            <td>
+              {game === 'runner'
+                ? `${r.score}점`
+                : `${(r.ticks / 20).toFixed(2)}초`}
+            </td>
           </tr>
         ))}
       </tbody>
@@ -45,10 +62,12 @@ export function Records({
   profile: Profile;
   initialGame?: GameKind;
   onBack: () => void;
-  onChallenge: (game: GameKind, mode: 'daily' | 'weekly') => void;
+  onChallenge: (game: GameKind, mode: RunMode) => void;
 }) {
   const [game, setGame] = useState<GameKind>(initialGame),
-    [mode, setMode] = useState<'daily' | 'weekly'>('daily'),
+    [mode, setMode] = useState<RunMode>(
+      initialGame === 'runner' ? 'normal' : 'daily',
+    ),
     [board, setBoard] = useState<Leaderboard | null>(null),
     [history, setHistory] = useState<HistoryRow[]>([]),
     [error, setError] = useState(''),
@@ -89,9 +108,11 @@ export function Records({
           게임{' '}
           <select
             value={game}
-            onChange={(e) =>
-              setGame(e.target.value === 'runner' ? 'runner' : 'bomber')
-            }
+            onChange={(e) => {
+              setGame(e.target.value === 'runner' ? 'runner' : 'bomber');
+              if (e.target.value === 'bomber' && mode === 'normal')
+                setMode('daily');
+            }}
           >
             <option value="bomber">팡팡 아레나</option>
             <option value="runner">바람 러너</option>
@@ -102,9 +123,18 @@ export function Records({
           <select
             value={mode}
             onChange={(e) =>
-              setMode(e.target.value === 'weekly' ? 'weekly' : 'daily')
+              setMode(
+                e.target.value === 'normal' && game === 'runner'
+                  ? 'normal'
+                  : e.target.value === 'weekly'
+                    ? 'weekly'
+                    : 'daily',
+              )
             }
           >
+            {game === 'runner' && (
+              <option value="normal">일반 무한 달리기</option>
+            )}
             <option value="daily">일간 도전</option>
             <option value="weekly">주간 도전</option>
           </select>
@@ -131,16 +161,17 @@ export function Records({
         board && (
           <>
             <p>
-              {mode === 'daily' ? '오늘' : '이번 주'}의 공통 조건 ·{' '}
-              {board.period}
-              {mode === 'weekly' ? ' 시작 주' : ''} · {board.stage}단계 · 시드{' '}
-              {board.seed} · 규칙 {board.rulesVersion}
+              {mode === 'normal'
+                ? '일반 무한 달리기 · 다양한 시드'
+                : `${mode === 'daily' ? '오늘' : '이번 주'}의 공통 조건 · ${board.period} · 시드 ${board.seed}`}{' '}
+              · {game === 'bomber' ? `${board.stage}단계 · ` : ''}규칙{' '}
+              {board.rulesVersion}
               <br />
               <small>
                 한국 시간 기준, 주간은 월요일 시작.{' '}
                 {game === 'bomber'
                   ? '점수 내림차순, 같은 점수는 완주 시간 오름차순'
-                  : '완주 시간 오름차순, 같은 시간은 점수 내림차순'}
+                  : '거리 내림차순, 같은 거리는 수집 점수 내림차순'}
                 . 두 값이 같으면 공동 순위입니다.
               </small>
             </p>
@@ -150,10 +181,14 @@ export function Records({
                   상위 기록 <small>{board.total}명</small>
                 </h2>
                 {board.top.length ? (
-                  <Table rows={board.top} myId={profile.player?.id ?? ''} />
+                  <Table
+                    game={game}
+                    rows={board.top}
+                    myId={profile.player?.id ?? ''}
+                  />
                 ) : (
                   <p className="empty">
-                    아직 기록이 없어요.<span>첫 완주 기록을 남겨 보세요.</span>
+                    아직 기록이 없어요.<span>첫 기록을 남겨 보세요.</span>
                   </p>
                 )}
               </section>
@@ -161,31 +196,44 @@ export function Records({
                 <h2>내 최고 기록</h2>
                 {board.mine ? (
                   <p className="stat" data-testid="my-rank">
-                    {board.mine.rank}위 · {board.mine.score.toLocaleString()}점
+                    {board.mine.rank}위 ·{' '}
+                    {game === 'runner'
+                      ? `${((board.mine.distance ?? 0) / 10).toFixed(1)}m · 수집 `
+                      : ''}
+                    {board.mine.score.toLocaleString()}점
                     <small style={{ display: 'block', fontSize: 14 }}>
                       {(board.mine.ticks / 20).toFixed(2)}초
                     </small>
                   </p>
                 ) : (
-                  <p>이 도전의 완료 기록이 아직 없어요.</p>
+                  <p>이 도전의 기록이 아직 없어요.</p>
                 )}
                 <p>
-                  일반 싱글 진행 {progress?.completed_stage ?? 0}/5단계
+                  {game === 'runner' ? '이전 규칙의 러너' : '일반 싱글'} 진행{' '}
+                  {progress?.completed_stage ?? 0}/5단계
                   <br />
-                  일반 싱글 개인 최고 {progress?.best_score ?? 0}점
+                  {game === 'runner'
+                    ? '이전 규칙의 개인 최고'
+                    : '일반 싱글 개인 최고'}{' '}
+                  {progress?.best_score ?? 0}점
                 </p>
                 <small>
-                  일반 싱글 개인 최고는 내 진행 참고용입니다. 공통 코스 랭킹과
-                  합산하지 않습니다.
+                  {game === 'runner'
+                    ? '이전 5단계 진행도와 기록은 보존되며 무한 러너 랭킹에 합산되지 않습니다.'
+                    : '일반 싱글 개인 최고는 내 진행 참고용입니다. 공통 코스 랭킹과 합산하지 않습니다.'}
                 </small>
               </section>
             </div>
             <section className="panel" style={{ marginTop: 20 }}>
               <h2>내 순위 주변</h2>
               {board.nearby.length ? (
-                <Table rows={board.nearby} myId={profile.player?.id ?? ''} />
+                <Table
+                  game={game}
+                  rows={board.nearby}
+                  myId={profile.player?.id ?? ''}
+                />
               ) : (
-                <p>도전을 완료하면 내 순위 주변이 표시됩니다.</p>
+                <p>기록을 저장하면 내 순위 주변이 표시됩니다.</p>
               )}
             </section>
           </>
@@ -201,7 +249,9 @@ export function Records({
                   {h.mode === 'friendly'
                     ? '친선 대전'
                     : h.mode === 'normal'
-                      ? `싱글 ${h.stage}단계`
+                      ? game === 'runner' && h.rulesVersion !== '1'
+                        ? '무한 달리기'
+                        : `싱글 ${h.stage}단계`
                       : h.mode === 'daily'
                         ? '일간 도전'
                         : '주간 도전'}
@@ -213,7 +263,11 @@ export function Records({
                     draw: '무승부',
                     aborted: '중단',
                   }[h.outcome] ?? h.outcome}{' '}
-                  · {h.score}점
+                  ·{' '}
+                  {h.distance !== null
+                    ? `${(h.distance / 10).toFixed(1)}m · 수집 `
+                    : ''}
+                  {h.score}점 · 규칙 {h.rulesVersion}
                 </span>
                 <time>
                   {new Date(h.endedAt).toLocaleString('ko-KR', {

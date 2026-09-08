@@ -37,6 +37,6 @@ describe('공통 도전의 한국 시간 경계', () => {
       challenge('bomber', 'weekly', now).seed,
     );
     expect(rankOrder('bomber')).toBe('score DESC, ticks ASC');
-    expect(rankOrder('runner')).toBe('ticks ASC, score DESC');
+    expect(rankOrder('runner')).toBe('distance DESC, score DESC');
   });
 });

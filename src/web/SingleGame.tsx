@@ -6,7 +6,11 @@ import {
   stepBomber,
 } from '../core/bomber/game';
 import { TICK_MS } from '../core/random';
-import { createRunner, type RunnerState } from '../core/runner/game';
+import {
+  createEndlessRunner,
+  type EndlessState as RunnerState,
+  stopEndlessRunner,
+} from '../core/runner/endless';
 import type { GameKind, Profile } from '../shared/contracts';
 import { readHistory } from '../shared/rankings';
 import { type Run, type RunMode, readRun } from '../shared/runs';
@@ -98,7 +102,7 @@ export function SingleGame({
   const completed =
     profile.progress.find((p) => p.game === game)?.completed_stage ?? 0;
   const [stage, setStage] = useState(
-    mode === 'normal' ? Math.min(5, completed + 1) : 3,
+    game === 'runner' ? 1 : mode === 'normal' ? Math.min(5, completed + 1) : 3,
   );
   const [run, setRun] = useState<Run | null>(null),
     [state, setState] = useState<BomberState | RunnerState | null>(null);
@@ -134,7 +138,7 @@ export function SingleGame({
       setState(
         game === 'bomber'
           ? createBomber(r.seed, r.stage, ['single'])
-          : createRunner(r.seed, r.stage, ['single']),
+          : createEndlessRunner(r.seed, ['single']),
       );
       submitted.current = null;
     } catch (e) {
@@ -152,6 +156,9 @@ export function SingleGame({
         ticks: state.tick,
         score: state.players[0]?.score ?? 0,
         won: state.status === 'won',
+        ...(state.kind === 'runner'
+          ? { distance: state.players[0]?.distance ?? 0, reason: state.reason }
+          : {}),
       });
       setSaved(true);
       onSaved();
@@ -166,7 +173,14 @@ export function SingleGame({
             record &&
             record.ticks === state.tick &&
             record.score === state.players[0]?.score &&
-            record.outcome === (state.status === 'won' ? '완료' : '실패')
+            record.outcome ===
+              (state.kind === 'runner' && state.reason === 'manual'
+                ? '종료'
+                : state.status === 'won'
+                  ? '완료'
+                  : '실패') &&
+            (state.kind !== 'runner' ||
+              record.distance === state.players[0]?.distance)
           ) {
             setSaved(true);
             onSaved();
@@ -233,26 +247,28 @@ export function SingleGame({
           <h2>
             {game === 'bomber'
               ? '출구까지 나만의 길을 만드세요.'
-              : '바람을 타고 결승선까지 달려요.'}
+              : '새로운 풍경 속으로 끝없이 달려요.'}
           </h2>
           <p>
             {game === 'bomber'
               ? '금빛 출구 위 상자를 폭탄으로 부수고 도착하면 완료! 폭탄을 놓은 뒤에는 두 칸 밖으로 피하세요.'
-              : '자동으로 달립니다. Space로 장애물과 틈을 뛰어넘고 결승선에 도착하세요. 금빛 수집물을 얻으면 잠시 빨라집니다.'}
+              : '초원·동굴·하늘다리가 계속 이어집니다. 점프와 슬라이드로 장애물을 피하고 금빛 수집물로 기록을 높이세요.'}
           </p>
-          <div className="stages" aria-label="단계 선택">
-            {[1, 2, 3, 4, 5].map((n) => (
-              <button
-                key={n}
-                type="button"
-                disabled={mode !== 'normal' || n > completed + 1}
-                className={stage === n ? 'selected' : ''}
-                onClick={() => setStage(n)}
-              >
-                {n}단계{n <= completed ? ' ✓' : ''}
-              </button>
-            ))}
-          </div>
+          {game === 'bomber' && (
+            <div className="stages" aria-label="단계 선택">
+              {[1, 2, 3, 4, 5].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  disabled={mode !== 'normal' || n > completed + 1}
+                  className={stage === n ? 'selected' : ''}
+                  onClick={() => setStage(n)}
+                >
+                  {n}단계{n <= completed ? ' ✓' : ''}
+                </button>
+              ))}
+            </div>
+          )}
           <p className="instructions">
             {game === 'bomber' ? (
               <>
@@ -263,15 +279,16 @@ export function SingleGame({
               </>
             ) : (
               <>
-                Space: 점프 · 갈림길에서 ↑↓: 길 선택
+                Space 또는 ↑: 점프 · ↓ 누르는 동안: 슬라이드
                 <br />
-                2단계부터 틈, 3단계부터 갈림길, 4단계부터 움직이는 발판이
-                등장합니다. 점프를 길게 누르면 연속 점프하지 않으므로 다시 눌러
-                주세요.
+                점프·슬라이드·이동 장애물·발판을 조합한 12개 패턴이 이어집니다.
+                점프는 다시 눌러야 발동합니다.
               </>
             )}
             <br />
-            제한 시간 90초.
+            {game === 'bomber'
+              ? '제한 시간 90초.'
+              : '싱글은 시간 제한이 없습니다. 실패하거나 종료하면 기록을 저장합니다.'}
           </p>
           <div>
             <button
@@ -280,7 +297,11 @@ export function SingleGame({
               disabled={busy}
               onClick={() => void start()}
             >
-              {busy ? '준비 중…' : `${stage}단계 시작`}
+              {busy
+                ? '준비 중…'
+                : game === 'runner'
+                  ? '무한 달리기 시작'
+                  : `${stage}단계 시작`}
             </button>
           </div>
         </section>
@@ -295,11 +316,16 @@ export function SingleGame({
             {ended && (
               <section className="result" role="status">
                 <h2>
-                  {state.status === 'won'
-                    ? '스테이지 완료!'
-                    : '다시 한번 도전해요'}
+                  {state.kind === 'runner'
+                    ? '이번 달리기 기록'
+                    : state.status === 'won'
+                      ? '스테이지 완료!'
+                      : '다시 한번 도전해요'}
                 </h2>
                 <p>
+                  {state.kind === 'runner'
+                    ? `${((state.players[0]?.distance ?? 0) / 10).toFixed(1)}m · 수집 `
+                    : ''}
                   {state.players[0]?.score ?? 0}점 ·{' '}
                   {saved
                     ? '기록 저장 완료'
@@ -315,17 +341,21 @@ export function SingleGame({
                   >
                     같은 맵 재도전
                   </button>
-                  {state.status === 'won' && stage < 5 && mode === 'normal' && (
-                    <button
-                      type="button"
-                      className="primary"
-                      disabled={!saved || busy}
-                      onClick={() => void start(false, stage + 1)}
-                    >
-                      다음 단계
-                    </button>
-                  )}
-                  {state.status === 'won' &&
+                  {state.kind === 'bomber' &&
+                    state.status === 'won' &&
+                    stage < 5 &&
+                    mode === 'normal' && (
+                      <button
+                        type="button"
+                        className="primary"
+                        disabled={!saved || busy}
+                        onClick={() => void start(false, stage + 1)}
+                      >
+                        다음 단계
+                      </button>
+                    )}
+                  {state.kind === 'bomber' &&
+                    state.status === 'won' &&
                     stage === 5 &&
                     mode === 'normal' && (
                       <strong>5단계 정복! 모든 스테이지를 완료했어요.</strong>
@@ -335,9 +365,14 @@ export function SingleGame({
             )}
           </div>
           <aside className="panel">
-            <h2>{stage}단계 / 5</h2>
+            <h2>
+              {state.kind === 'runner' ? '끝없는 달리기' : `${stage}단계 / 5`}
+            </h2>
             <div className="stat" data-testid="time-left">
-              {Math.ceil((BOMBER_LIMIT - state.tick) / 20)}초
+              {state.kind === 'runner'
+                ? Math.floor(state.tick / 20)
+                : Math.ceil((BOMBER_LIMIT - state.tick) / 20)}
+              초 {state.kind === 'runner' ? '달리는 중' : ''}
             </div>
             <p>점수 {state.players[0]?.score ?? 0}</p>
             {state.kind === 'runner' ? (
@@ -359,11 +394,10 @@ export function SingleGame({
                 </>
               ) : (
                 <>
-                  Space 점프
+                  Space / ↑ 점프
+                  <br />↓ 누르기 슬라이드
                   <br />
-                  갈림길 ↑↓ 선택
-                  <br />
-                  결승선까지 달려요.
+                  거리와 수집 점수에 도전하세요.
                 </>
               )}
             </p>
@@ -375,6 +409,18 @@ export function SingleGame({
             {!ended && (
               <button type="button" onClick={() => setPaused((p) => !p)}>
                 {paused ? '계속하기' : '일시정지'}
+              </button>
+            )}
+            {!ended && state.kind === 'runner' && (
+              <button
+                type="button"
+                disabled={state.tick < 1}
+                onClick={() => {
+                  stopEndlessRunner(state);
+                  onTick();
+                }}
+              >
+                종료하고 저장
               </button>
             )}
             {paused && !ended && <p role="status">일시정지 중</p>}

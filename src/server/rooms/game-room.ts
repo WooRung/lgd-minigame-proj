@@ -4,9 +4,14 @@ import {
   createBomber,
   stepBomber,
 } from '../../core/bomber/game';
-import { RULES_VERSION, TICK_MS } from '../../core/random';
-import { createRunner, rankRunners, stepRunner } from '../../core/runner/game';
+import { TICK_MS } from '../../core/random';
+import {
+  createEndlessRunner,
+  rankEndlessRunners,
+  stepEndlessRunner,
+} from '../../core/runner/endless';
 import { isGame, isObject } from '../../shared/contracts';
+import { rulesForGame } from '../../shared/game-rules';
 import {
   IDLE_MS,
   parseCommand,
@@ -44,6 +49,18 @@ export class GameRoom extends DurableObject<Env> {
     super(ctx, env);
     ctx.blockConcurrencyWhile(async () => {
       this.room = (await ctx.storage.get<RoomView>('room')) ?? null;
+      if (this.room && !this.room.rulesVersion)
+        this.room.rulesVersion =
+          this.room.state?.kind === 'runner'
+            ? this.room.state.course.rulesVersion
+            : this.room.state?.kind === 'bomber'
+              ? this.room.state.map.rulesVersion
+              : rulesForGame(this.room.game);
+      if (
+        this.room?.state?.kind === 'runner' &&
+        this.room.state.course.rulesVersion !== rulesForGame('runner')
+      )
+        this.room.state = null;
       this.expiresAt = (await ctx.storage.get<number>('expiresAt')) ?? 0;
       if (
         this.room &&
@@ -88,6 +105,7 @@ export class GameRoom extends DurableObject<Env> {
           throw new HttpError(400, '게임을 선택해 주세요.');
         this.room = {
           code: data.code,
+          rulesVersion: rulesForGame(data.game),
           game: data.game,
           hostId: id,
           members: [],
@@ -211,6 +229,7 @@ export class GameRoom extends DurableObject<Env> {
           .filter((m) => !m.left)
           .sort((a, b) => a.slot - b.slot);
         room.phase = 'countdown';
+        room.rulesVersion = rulesForGame(room.game);
         room.matchId = crypto.randomUUID();
         room.startedAt = Date.now() + 2000;
         room.state =
@@ -221,9 +240,8 @@ export class GameRoom extends DurableObject<Env> {
                 room.members.map((m) => m.id),
                 true,
               )
-            : createRunner(
+            : createEndlessRunner(
                 room.seed,
-                3,
                 room.members.map((m) => m.id),
                 true,
               );
@@ -327,7 +345,7 @@ export class GameRoom extends DurableObject<Env> {
       for (const [id, input] of Object.entries(this.inputs))
         if (Date.now() - input.at < 250) inputs[id] = input.value;
       if (room.state.kind === 'bomber') stepBomber(room.state, inputs);
-      else stepRunner(room.state, inputs);
+      else stepEndlessRunner(room.state, inputs);
     }
     if (room.state.status !== 'playing') {
       void this.finish(false);
@@ -347,7 +365,7 @@ export class GameRoom extends DurableObject<Env> {
       ? '서버 실행이 중단되어 승패 없이 종료했습니다.'
       : '친선 경기가 끝났어요.';
     const runnerRanks =
-      room.state?.kind === 'runner' ? rankRunners(room.state.players) : null;
+      room.state?.kind === 'runner' ? rankEndlessRunners(room.state) : null;
     room.results = room.members.map((m) => {
       const p = room.state?.players.find((p) => p.id === m.id);
       const win = room.state?.winners.includes(m.id) ?? false;
@@ -360,6 +378,7 @@ export class GameRoom extends DurableObject<Env> {
           : (runnerRanks?.find((r) => r.id === m.id)?.rank ??
             (draw ? 1 : win ? 1 : 2)),
         score: p?.score ?? 0,
+        distance: p && 'distance' in p ? p.distance : null,
         outcome: aborted
           ? 'aborted'
           : draw && (!runnerRanks || win)
@@ -384,7 +403,7 @@ export class GameRoom extends DurableObject<Env> {
           room.matchId,
           room.game,
           room.seed,
-          RULES_VERSION,
+          room.rulesVersion ?? rulesForGame(room.game),
           Date.now(),
           room.results.some((r) => r.outcome === 'aborted')
             ? 'aborted'
@@ -392,8 +411,15 @@ export class GameRoom extends DurableObject<Env> {
         ),
         ...room.results.map((r) =>
           this.env.DB.prepare(
-            'INSERT OR IGNORE INTO match_results(match_id,player_id,rank,score,outcome) VALUES(?,?,?,?,?)',
-          ).bind(room.matchId, r.playerId, r.rank, r.score, r.outcome),
+            'INSERT OR IGNORE INTO match_results(match_id,player_id,rank,score,outcome,distance) VALUES(?,?,?,?,?,?)',
+          ).bind(
+            room.matchId,
+            r.playerId,
+            r.rank,
+            r.score,
+            r.outcome,
+            r.distance ?? null,
+          ),
         ),
       ]);
       room.saved = true;
@@ -417,7 +443,7 @@ export class GameRoom extends DurableObject<Env> {
     if (room.members.every((m) => m.left)) deadlines.push(Date.now() + 1000);
     deadlines.push(
       room.phase === 'playing' || room.phase === 'countdown'
-        ? room.startedAt + 120000
+        ? room.startedAt + (room.game === 'runner' ? 210000 : 120000)
         : this.expiresAt,
     );
     await this.ctx.storage.setAlarm(
